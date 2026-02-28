@@ -139,17 +139,20 @@ def run_crawl(self, crawl_id: int, start_url: str, max_urls: int):
                         description=issue.description,
                         recommendation=issue.recommendation,
                     ))
-                    if issue.severity == "critical":   n_critical += 1
-                    elif issue.severity == "warning":  n_warning  += 1
-                    else:                              n_info     += 1
+                    if issue.severity == "critical":
+                        n_critical += 1
+                    elif issue.severity == "warning":
+                        n_warning += 1
+                    else:
+                        n_info += 1
 
                 if i % 10 == 0:
-                    crawl.crawled_urls   = n_crawled
-                    crawl.failed_urls    = n_failed
-                    crawl.total_urls     = len(pages_data)
+                    crawl.crawled_urls = n_crawled
+                    crawl.failed_urls = n_failed
+                    crawl.total_urls = len(pages_data)
                     crawl.critical_issues = n_critical
-                    crawl.warning_issues  = n_warning
-                    crawl.info_issues     = n_info
+                    crawl.warning_issues = n_warning
+                    crawl.info_issues = n_info
                     db.commit()
 
             except Exception as e:
@@ -157,14 +160,14 @@ def run_crawl(self, crawl_id: int, start_url: str, max_urls: int):
                 db.rollback()
 
         crawl = db.query(Crawl).filter(Crawl.id == crawl_id).first()
-        crawl.status        = CrawlStatus.COMPLETED
-        crawl.completed_at  = datetime.utcnow()
-        crawl.crawled_urls  = n_crawled
-        crawl.failed_urls   = n_failed
-        crawl.total_urls    = len(pages_data)
+        crawl.status = CrawlStatus.COMPLETED
+        crawl.completed_at = datetime.utcnow()
+        crawl.crawled_urls = n_crawled
+        crawl.failed_urls = n_failed
+        crawl.total_urls = len(pages_data)
         crawl.critical_issues = n_critical
-        crawl.warning_issues  = n_warning
-        crawl.info_issues     = n_info
+        crawl.warning_issues = n_warning
+        crawl.info_issues = n_info
         db.commit()
         return {"status": "completed", "pages": n_crawled}
 

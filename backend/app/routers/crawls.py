@@ -77,10 +77,10 @@ def export_csv(crawl_id: int, db: Session = Depends(get_db)):
     pages = db.query(Page).filter(Page.crawl_id == crawl_id).all()
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["URL","Status","Response Time","Title","Title Len",
-                "Meta Description","Meta Len","H1","H2 Count","Canonical",
-                "Internal Links","External Links","Images No Alt",
-                "Word Count","Indexable","Redirect URL","Depth","Content Type"])
+    w.writerow(["URL", "Status", "Response Time", "Title", "Title Len",
+                "Meta Description", "Meta Len", "H1", "H2 Count", "Canonical",
+                "Internal Links", "External Links", "Images No Alt",
+                "Word Count", "Indexable", "Redirect URL", "Depth", "Content Type"])
     for p in pages:
         w.writerow([
             p.url, p.status_code or "",

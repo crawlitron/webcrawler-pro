@@ -36,7 +36,7 @@ def get_pages(
     counts = {}
     if ids:
         for pid, cnt in db.query(Issue.page_id, func.count(Issue.id)).filter(
-            Issue.page_id.in_(ids)).group_by(Issue.page_id).all():
+                Issue.page_id.in_(ids)).group_by(Issue.page_id).all():
             counts[pid] = cnt
     items = [PageResponse(
         id=p.id, crawl_id=p.crawl_id, url=p.url, status_code=p.status_code,
@@ -60,7 +60,12 @@ def get_issues(
 ):
     if not db.query(Crawl).filter(Crawl.id == crawl_id).first():
         raise HTTPException(404, "Crawl not found")
-    q = db.query(Issue, Page.url).join(Page, Issue.page_id == Page.id).filter(Issue.crawl_id == crawl_id)
+    q = db.query(
+        Issue,
+        Page.url).join(
+        Page,
+        Issue.page_id == Page.id).filter(
+            Issue.crawl_id == crawl_id)
     if severity:
         try:
             q = q.filter(Issue.severity == IssueSeverity(severity))
@@ -77,7 +82,11 @@ def get_issues(
             issue_type=issue.issue_type, description=issue.description,
             recommendation=issue.recommendation,
         ))
-        if issue.severity == IssueSeverity.CRITICAL:  n_crit += 1
-        elif issue.severity == IssueSeverity.WARNING: n_warn += 1
-        else:                                         n_info += 1
-    return IssueListResponse(items=items, total=len(items), critical=n_crit, warning=n_warn, info=n_info)
+        if issue.severity == IssueSeverity.CRITICAL:
+            n_crit += 1
+        elif issue.severity == IssueSeverity.WARNING:
+            n_warn += 1
+        else:
+            n_info += 1
+    return IssueListResponse(items=items, total=len(
+        items), critical=n_crit, warning=n_warn, info=n_info)

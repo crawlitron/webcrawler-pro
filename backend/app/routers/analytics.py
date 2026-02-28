@@ -130,12 +130,12 @@ def response_times_endpoint(crawl_id: int, db: Session = Depends(get_db)) -> Dic
     if not values:
         return {"buckets": [], "avg": 0, "min": 0, "max": 0, "p50": 0, "p90": 0, "p95": 0}
     buckets = [
-        {"range": "< 0.5s",  "min": 0.0, "max": 0.5,  "count": 0},
-        {"range": "0.5-1s",  "min": 0.5, "max": 1.0,  "count": 0},
-        {"range": "1-2s",    "min": 1.0, "max": 2.0,  "count": 0},
-        {"range": "2-3s",    "min": 2.0, "max": 3.0,  "count": 0},
-        {"range": "3-5s",    "min": 3.0, "max": 5.0,  "count": 0},
-        {"range": "> 5s",    "min": 5.0, "max": 9999, "count": 0},
+        {"range": "< 0.5s", "min": 0.0, "max": 0.5, "count": 0},
+        {"range": "0.5-1s", "min": 0.5, "max": 1.0, "count": 0},
+        {"range": "1-2s", "min": 1.0, "max": 2.0, "count": 0},
+        {"range": "2-3s", "min": 2.0, "max": 3.0, "count": 0},
+        {"range": "3-5s", "min": 3.0, "max": 5.0, "count": 0},
+        {"range": "> 5s", "min": 5.0, "max": 9999, "count": 0},
     ]
     for v in values:
         for b in buckets:
@@ -156,7 +156,8 @@ def response_times_endpoint(crawl_id: int, db: Session = Depends(get_db)) -> Dic
 
 
 @router.get("/crawls/{crawl_id}/analytics/top-issues")
-def top_issues(crawl_id: int, limit: int = 10, db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+def top_issues(crawl_id: int, limit: int = 10,
+               db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
     """Top N most frequent issue types."""
     _get_crawl_or_404(crawl_id, db)
     rows = db.query(

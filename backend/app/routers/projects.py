@@ -1,6 +1,7 @@
+from fastapi import APIRouter, Depends, HTTPException
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from ..database import get_db
@@ -11,7 +12,10 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
 def _to_response(project: Project, db: Session) -> ProjectResponse:
-    last = db.query(Crawl).filter(Crawl.project_id == project.id).order_by(desc(Crawl.created_at)).first()
+    last = db.query(Crawl).filter(
+        Crawl.project_id == project.id).order_by(
+        desc(
+            Crawl.created_at)).first()
     return ProjectResponse(
         id=project.id, name=project.name, start_url=project.start_url,
         max_urls=project.max_urls, created_at=project.created_at,

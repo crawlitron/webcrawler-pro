@@ -20,7 +20,7 @@ def create_tables(retries=10, delay=3):
             logger.info("Database tables created successfully")
             return
         except Exception as e:
-            logger.warning(f"DB not ready (attempt {i+1}/{retries}): {e}")
+            logger.warning(f"DB not ready (attempt {i + 1}/{retries}): {e}")
             time.sleep(delay)
     raise RuntimeError("Could not connect to database after multiple retries")
 

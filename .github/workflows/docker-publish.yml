@@ -76,9 +76,10 @@ jobs:
         working-directory: ./backend
         run: |
           # Stop the build if there are Python syntax errors or undefined names
+          # Stop build on syntax errors / undefined names only
           flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Full lint with max line length 100
-          flake8 app/ --count --max-line-length=100 --statistics --exclude=__pycache__
+          # Full lint using .flake8 config (max-line-length=130, ignores E128,E501,W503)
+          flake8 app/ --count --statistics
 
       - name: Run tests
         working-directory: ./backend

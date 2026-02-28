@@ -1,7 +1,6 @@
 
 import re
 import json
-import time
 import scrapy
 from scrapy.linkextractors import LinkExtractor
 from urllib.parse import urlparse, urljoin
@@ -91,7 +90,11 @@ class SEOSpider(scrapy.Spider):
     def _extract(self, response) -> dict:
         url = response.url
         status = response.status
-        ct = response.headers.get("Content-Type", b"").decode("utf-8", errors="ignore").split(";")[0].strip()
+        ct = response.headers.get(
+            "Content-Type",
+            b"").decode(
+            "utf-8",
+            errors="ignore").split(";")[0].strip()
         depth = response.meta.get("depth", 0)
         rt = response.meta.get("download_latency", 0.0)
 
