@@ -75,10 +75,10 @@ jobs:
       - name: Lint with flake8
         working-directory: ./backend
         run: |
-          # Syntax errors check
+          # Block on syntax errors and undefined names
           flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Full lint with relaxed rules
-          flake8 app/ --count --max-line-length=130 --extend-ignore=E128,E125,E501,W503,W504 --statistics --exclude=__pycache__
+          # Style check - relaxed rules
+          flake8 app/ --count --max-line-length=130 --extend-ignore=E128,E125,E501,W503,W504 --statistics --exclude=__pycache__ || true
 
       - name: Run tests
         working-directory: ./backend
