@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from .database import engine, Base
-from .routers import projects, crawls, pages
+from .routers import projects, crawls, pages, analytics
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="WebCrawler Pro API",
     description="SEO Crawler API — Screaming Frog alternative",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -53,6 +53,7 @@ app.add_middleware(
 app.include_router(projects.router)
 app.include_router(crawls.router)
 app.include_router(pages.router)
+app.include_router(analytics.router)
 
 
 @app.get("/health")

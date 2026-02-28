@@ -97,3 +97,174 @@ def export_csv(crawl_id: int, db: Session = Depends(get_db)):
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=crawl_{crawl_id}.csv"},
     )
+
+
+@router.get("/crawls/{crawl_id}/export/json")
+def export_json(crawl_id: int, db: Session = Depends(get_db)):
+    """Export all crawl data as JSON."""
+    import json as _json
+    crawl = db.query(Crawl).filter(Crawl.id == crawl_id).first()
+    if not crawl:
+        raise HTTPException(404, "Crawl not found")
+    pages = db.query(Page).filter(Page.crawl_id == crawl_id).all()
+    data = {
+        "crawl_id": crawl_id,
+        "project_id": crawl.project_id,
+        "status": crawl.status.value,
+        "crawled_urls": crawl.crawled_urls,
+        "total_urls": crawl.total_urls,
+        "started_at": crawl.started_at.isoformat() if crawl.started_at else None,
+        "completed_at": crawl.completed_at.isoformat() if crawl.completed_at else None,
+        "pages": [
+            {
+                "url": p.url,
+                "status_code": p.status_code,
+                "content_type": p.content_type,
+                "response_time": p.response_time,
+                "title": p.title,
+                "meta_description": p.meta_description,
+                "h1": p.h1,
+                "h2_count": p.h2_count,
+                "canonical_url": p.canonical_url,
+                "internal_links_count": p.internal_links_count,
+                "external_links_count": p.external_links_count,
+                "images_without_alt": p.images_without_alt,
+                "word_count": p.word_count,
+                "is_indexable": p.is_indexable,
+                "redirect_url": p.redirect_url,
+                "depth": p.depth,
+                "crawled_at": p.crawled_at.isoformat() if p.crawled_at else None,
+                "extra_data": p.extra_data,
+            }
+            for p in pages
+        ],
+    }
+    content = _json.dumps(data, ensure_ascii=False, indent=2)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        iter([content.encode("utf-8")]),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename=crawl_{crawl_id}.json"},
+    )
+
+
+@router.get("/crawls/{crawl_id}/export/sitemap")
+def export_sitemap(crawl_id: int, db: Session = Depends(get_db)):
+    """Export sitemap.xml for all indexable 200-OK HTML pages."""
+    from fastapi.responses import Response
+    crawl = db.query(Crawl).filter(Crawl.id == crawl_id).first()
+    if not crawl:
+        raise HTTPException(404, "Crawl not found")
+    pages = db.query(Page).filter(
+        Page.crawl_id == crawl_id,
+        Page.status_code == 200,
+        Page.is_indexable == True,  # noqa: E712
+        Page.content_type.like("%text/html%")
+    ).order_by(Page.depth, Page.url).all()
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    priority_map = {0: "1.0", 1: "0.8", 2: "0.6"}
+    for p in pages:
+        lastmod = p.crawled_at.strftime("%Y-%m-%d") if p.crawled_at else ""
+        priority = priority_map.get(p.depth, "0.4")
+        safe_url = p.url.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        xml += "  <url>\n"
+        xml += f"    <loc>{safe_url}</loc>\n"
+        if lastmod:
+            xml += f"    <lastmod>{lastmod}</lastmod>\n"
+        xml += "    <changefreq>weekly</changefreq>\n"
+        xml += f"    <priority>{priority}</priority>\n"
+        xml += "  </url>\n"
+    xml += "</urlset>"
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={"Content-Disposition": f"attachment; filename=sitemap_{crawl_id}.xml"},
+    )
+
+
+@router.post("/crawls/{crawl_id}/cancel")
+def cancel_crawl(crawl_id: int, db: Session = Depends(get_db)):
+    """Cancel a running or pending crawl."""
+    import os as _os
+    crawl = db.query(Crawl).filter(Crawl.id == crawl_id).first()
+    if not crawl:
+        raise HTTPException(404, "Crawl not found")
+    if crawl.status not in (CrawlStatus.RUNNING, CrawlStatus.PENDING):
+        raise HTTPException(409, f"Cannot cancel crawl in status: {crawl.status.value}")
+    if crawl.celery_task_id:
+        try:
+            from celery import Celery
+            celery_app = Celery(
+                broker=_os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
+            )
+            celery_app.control.revoke(crawl.celery_task_id, terminate=True, signal="SIGTERM")
+        except Exception:
+            pass
+    from datetime import datetime
+    crawl.status = CrawlStatus.FAILED
+    crawl.error_message = "Cancelled by user"
+    crawl.completed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(crawl)
+    return _to_response(crawl)
+
+
+@router.get("/crawls/{crawl_id}/links")
+def get_links(
+    crawl_id: int,
+    link_type: str = None,
+    status_code: int = None,
+    nofollow: bool = None,
+    page: int = 1,
+    page_size: int = 50,
+    db: Session = Depends(get_db),
+):
+    """Get all found links (internal + external) with filters."""
+    crawl = db.query(Crawl).filter(Crawl.id == crawl_id).first()
+    if not crawl:
+        raise HTTPException(404, "Crawl not found")
+    pages_q = db.query(Page).filter(Page.crawl_id == crawl_id)
+    if status_code is not None:
+        pages_q = pages_q.filter(Page.status_code == status_code)
+    all_pages = pages_q.all()
+    links = []
+    for p in all_pages:
+        extra = p.extra_data or {}
+        if link_type in (None, "internal"):
+            for lnk in extra.get("internal_links", [])[:100]:
+                lnk_nofollow = lnk.get("nofollow", False)
+                if nofollow is not None and lnk_nofollow != nofollow:
+                    continue
+                links.append({
+                    "source_url": p.url,
+                    "target_url": lnk.get("url", ""),
+                    "anchor_text": lnk.get("text", ""),
+                    "link_type": "internal",
+                    "nofollow": lnk_nofollow,
+                    "status_code": lnk.get("status_code"),
+                })
+        if link_type in (None, "external"):
+            for lnk in extra.get("external_links", [])[:50]:
+                lnk_nofollow = lnk.get("nofollow", False)
+                if nofollow is not None and lnk_nofollow != nofollow:
+                    continue
+                links.append({
+                    "source_url": p.url,
+                    "target_url": lnk.get("url", ""),
+                    "anchor_text": lnk.get("text", ""),
+                    "link_type": "external",
+                    "nofollow": lnk_nofollow,
+                    "status_code": lnk.get("status_code"),
+                })
+    total = len(links)
+    start = (page - 1) * page_size
+    end = start + page_size
+    import math
+    return {
+        "items": links[start:end],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": max(1, math.ceil(total / page_size)),
+    }

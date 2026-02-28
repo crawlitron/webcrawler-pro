@@ -1,0 +1,326 @@
+# =============================================================================
+# WebCrawler Pro - VPS Production Docker Compose
+# Usage: docker compose -f docker-compose.vps.yml up -d
+# Requirements: .env file with DOMAIN, ACME_EMAIL, GITHUB_USER, etc.
+# =============================================================================
+
+version: "3.9"
+
+networks:
+  proxy:
+    external: false
+  internal:
+    external: false
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  portainer_data:
+
+services:
+
+  # ===========================================================================
+  # Traefik — Reverse Proxy + Automatic SSL (Let's Encrypt)
+  # ===========================================================================
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    networks:
+      - proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/acme.json:/acme.json
+    environment:
+      - TZ=UTC
+    labels:
+      - "traefik.enable=true"
+      # Traefik dashboard — accessible at traefik.DOMAIN
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
+      # Basic auth for dashboard (generate with: htpasswd -nb admin password | sed -e s/\$/\$\$/g)
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH:-admin:$$apr1$$xyz$$placeholder}"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================================================
+  # PostgreSQL 16
+  # ===========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: webcrawler-postgres
+    restart: unless-stopped
+    networks:
+      - internal
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-webcrawler}
+      POSTGRES_USER: ${POSTGRES_USER:-webcrawler}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-webcrawler} -d ${POSTGRES_DB:-webcrawler}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "traefik.enable=false"
+
+  # ===========================================================================
+  # Redis 7
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: webcrawler-redis
+    restart: unless-stopped
+    networks:
+      - internal
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "traefik.enable=false"
+
+  # ===========================================================================
+  # MinIO — S3-compatible Object Storage (Exports, Screenshots)
+  # ===========================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: webcrawler-minio
+    restart: unless-stopped
+    networks:
+      - internal
+      - proxy
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=webcrawler-pro_proxy"
+      # MinIO API
+      - "traefik.http.routers.minio-api.rule=Host(`s3.${DOMAIN}`)"
+      - "traefik.http.routers.minio-api.entrypoints=websecure"
+      - "traefik.http.routers.minio-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.minio-api.service=minio-api-svc"
+      - "traefik.http.services.minio-api-svc.loadbalancer.server.port=9000"
+      # MinIO Console
+      - "traefik.http.routers.minio-console.rule=Host(`minio.${DOMAIN}`)"
+      - "traefik.http.routers.minio-console.entrypoints=websecure"
+      - "traefik.http.routers.minio-console.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.minio-console.service=minio-console-svc"
+      - "traefik.http.services.minio-console-svc.loadbalancer.server.port=9001"
+
+  # ===========================================================================
+  # Backend — FastAPI
+  # ===========================================================================
+  backend:
+    image: ghcr.io/crawlitron/webcrawler-pro/backend:latest
+    container_name: webcrawler-backend
+    restart: unless-stopped
+    networks:
+      - internal
+      - proxy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-webcrawler}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-webcrawler}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "false"
+      FRONTEND_URL: https://${DOMAIN}
+      ALLOWED_HOSTS: ${DOMAIN},www.${DOMAIN},backend
+      CORS_ORIGINS: https://${DOMAIN},https://www.${DOMAIN}
+      MINIO_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_S3_BUCKET: ${MINIO_BUCKET:-webcrawler}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=webcrawler-pro_proxy"
+      - "traefik.http.routers.backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.backend.service=backend-svc"
+      - "traefik.http.services.backend-svc.loadbalancer.server.port=8000"
+      # Also route /docs and /openapi.json
+      - "traefik.http.routers.backend-docs.rule=Host(`${DOMAIN}`) && (PathPrefix(`/docs`) || PathPrefix(`/openapi.json`) || Path(`/health`) || Path(`/`))"
+      - "traefik.http.routers.backend-docs.entrypoints=websecure"
+      - "traefik.http.routers.backend-docs.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.backend-docs.service=backend-svc"
+      - "traefik.http.routers.backend-docs.priority=1"
+
+  # ===========================================================================
+  # Celery Worker
+  # ===========================================================================
+  worker:
+    image: ghcr.io/crawlitron/webcrawler-pro/backend:latest
+    container_name: webcrawler-worker
+    restart: unless-stopped
+    networks:
+      - internal
+    command: celery -A celery_worker worker --loglevel=info --concurrency=4 -Q crawl
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-webcrawler}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-webcrawler}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY}
+      MINIO_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_S3_BUCKET: ${MINIO_BUCKET:-webcrawler}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "celery", "-A", "celery_worker", "inspect", "ping", "-d", "celery@$$HOSTNAME"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "traefik.enable=false"
+
+  # ===========================================================================
+  # Celery Beat — Scheduled Tasks
+  # ===========================================================================
+  worker-beat:
+    image: ghcr.io/crawlitron/webcrawler-pro/backend:latest
+    container_name: webcrawler-worker-beat
+    restart: unless-stopped
+    networks:
+      - internal
+    command: celery -A celery_worker beat --loglevel=info --scheduler celery.beat:PersistentScheduler
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-webcrawler}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-webcrawler}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=false"
+
+  # ===========================================================================
+  # Frontend — Next.js
+  # ===========================================================================
+  frontend:
+    image: ghcr.io/crawlitron/webcrawler-pro/frontend:latest
+    container_name: webcrawler-frontend
+    restart: unless-stopped
+    networks:
+      - proxy
+    environment:
+      NEXT_PUBLIC_API_URL: https://${DOMAIN}
+      NODE_ENV: production
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=webcrawler-pro_proxy"
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend.service=frontend-svc"
+      - "traefik.http.services.frontend-svc.loadbalancer.server.port=3000"
+      - "traefik.http.routers.frontend.priority=2"
+      # www → non-www redirect
+      - "traefik.http.middlewares.www-redirect.redirectregex.regex=^https://www\.(.+)"
+      - "traefik.http.middlewares.www-redirect.redirectregex.replacement=https://$${1}"
+      - "traefik.http.middlewares.www-redirect.redirectregex.permanent=true"
+
+  # ===========================================================================
+  # Portainer — Docker Web UI
+  # ===========================================================================
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: webcrawler-portainer
+    restart: unless-stopped
+    networks:
+      - proxy
+      - internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=webcrawler-pro_proxy"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.${DOMAIN}`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.portainer.service=portainer-svc"
+      - "traefik.http.services.portainer-svc.loadbalancer.server.port=9000"
+
+  # ===========================================================================
+  # Watchtower — Auto-Updates Docker Images
+  # ===========================================================================
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: webcrawler-watchtower
+    restart: unless-stopped
+    networks:
+      - internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-86400}
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_INCLUDE_STOPPED: "false"
+      WATCHTOWER_NOTIFICATIONS: "slack"
+      WATCHTOWER_NOTIFICATION_SLACK_HOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      WATCHTOWER_NOTIFICATION_SLACK_IDENTIFIER: webcrawler-pro
+      # Only watch specific containers
+      WATCHTOWER_SCOPE: webcrawler-pro
+    command: webcrawler-backend webcrawler-worker webcrawler-worker-beat webcrawler-frontend
+    labels:
+      - "traefik.enable=false"

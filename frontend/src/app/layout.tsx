@@ -22,13 +22,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
                 <span className="text-xl font-bold text-gray-900">WebCrawler Pro</span>
               </a>
-              <div className="text-sm text-gray-500">SEO Crawler &amp; Site Auditor</div>
+              <div className="hidden sm:flex items-center gap-1">
+                <a href="/"
+                  className="px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition">
+                  Dashboard
+                </a>
+                <a href="/settings"
+                  className="px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition">
+                  Settings
+                </a>
+              </div>
+              <div className="sm:hidden text-sm text-gray-500">SEO Crawler</div>
             </div>
           </div>
         </nav>
         <main className="min-h-screen bg-gray-50">{children}</main>
         <footer className="border-t bg-white py-4 text-center text-sm text-gray-400">
-          WebCrawler Pro © {new Date().getFullYear()} — Professional SEO Crawler
+          WebCrawler Pro &copy; {new Date().getFullYear()} &mdash; Professional SEO Crawler
         </footer>
       </body>
     </html>
