@@ -100,17 +100,11 @@ class SEOAnalyzer:
         elif len(meta) < self.META_MIN:
             issues.append(
                 SEOIssue(
-                    "warning", "meta_description_too_short", f"Meta description too short: {
-                        len(meta)} chars (min {
-                        self.META_MIN})", f"Expand to at least {
-                        self.META_MIN} characters."))
+                    "warning", "meta_description_too_short", f"Meta description too short: {len(meta)} chars (min {self.META_MIN})", f"Expand to at least {self.META_MIN} characters."))
         elif len(meta) > self.META_MAX:
             issues.append(
                 SEOIssue(
-                    "warning", "meta_description_too_long", f"Meta description too long: {
-                        len(meta)} chars (max {
-                        self.META_MAX})", f"Shorten to max {
-                        self.META_MAX} characters."))
+                    "warning", "meta_description_too_long", f"Meta description too long: {len(meta)} chars (max {self.META_MAX})", f"Shorten to max {self.META_MAX} characters."))
 
         # H1
         h1 = (page.get("h1") or "").strip()
@@ -159,10 +153,8 @@ class SEOAnalyzer:
                 SEOIssue(
                     "warning",
                     "thin_content",
-                    f"Thin content warning: only {words} words (recommended: {
-                        self.THIN_CONTENT_WORDS}+)",
-                    f"Expand content to at least {
-                        self.THIN_CONTENT_WORDS} words for better rankings."))
+                    f"Thin content warning: only {words} words (recommended: {self.THIN_CONTENT_WORDS}+)",
+                    f"Expand content to at least {self.THIN_CONTENT_WORDS} words for better rankings."))
 
         # Slow response
         rt = page.get("response_time", 0) or 0
@@ -171,9 +163,7 @@ class SEOAnalyzer:
                 SEOIssue(
                     "warning",
                     "slow_response",
-                    f"Slow response time: {
-                        rt:.2f}s (threshold: {
-                        self.SLOW_RESPONSE_SEC}s)",
+                    f"Slow response time: {rt:.2f}s (threshold: {self.SLOW_RESPONSE_SEC}s)",
                     "Optimize server response time. Page speed is a Google ranking factor."))
 
         # Canonical mismatch
@@ -197,9 +187,7 @@ class SEOAnalyzer:
                     SEOIssue(
                         "warning",
                         "url_too_long",
-                        f"URL too long: {
-                            len(url)} characters (max recommended: {
-                            self.URL_MAX_LENGTH})",
+                        f"URL too long: {len(url)} characters (max recommended: {self.URL_MAX_LENGTH})",
                         "Use shorter, descriptive URLs. Long URLs may be truncated in SERPs."))
 
             if re.search(r"[A-Z]", path):
