@@ -69,7 +69,7 @@ cp .env.example .env   # Then edit .env with your values
 make build
 ```
 
-🎉 **Done!** Open [http://localhost:3000](http://localhost:3000) in your browser.
+🎉 **Done!** Open [http://localhost:44544](http://localhost:44544) in your browser.
 
 ---
 
@@ -154,9 +154,9 @@ webcrawler_redis        Up (healthy)
 
 Once running, access the interactive API docs:
 
-- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-- **OpenAPI JSON**: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
+- **Swagger UI**: [http://localhost:4454400/docs](http://localhost:4454400/docs)
+- **ReDoc**: [http://localhost:4454400/redoc](http://localhost:4454400/redoc)
+- **OpenAPI JSON**: [http://localhost:4454400/openapi.json](http://localhost:4454400/openapi.json)
 
 ### Key Endpoints
 
@@ -204,14 +204,14 @@ make lint          # Run linter
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    Nginx (Port 80)                  │
+│                    Nginx (Port 44544)                  │
 │              Reverse Proxy + Rate Limiting          │
 └──────────┬──────────────────────────┬──────────────┘
            │  /api/*  /docs  /ws/*    │  /*
            ▼                          ▼
 ┌──────────────────┐        ┌──────────────────┐
 │  FastAPI Backend │        │  Next.js Frontend │
-│     Port 8000    │        │     Port 3000     │
+│     Port 4454400    │        │     Port 3000     │
 └────────┬─────────┘        └──────────────────┘
          │
     ┌────┴────────────┐

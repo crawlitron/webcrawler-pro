@@ -28,7 +28,7 @@ awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 up: ## Start all services in detached mode
 @echo "$(GREEN)Starting WebCrawler Pro...$(RESET)"
 docker compose up -d
-@echo "$(GREEN)✅ Services started. App: http://localhost:80  (change APP_PORT in .env to use different port)$(RESET)"
+@echo "$(GREEN)✅ Services started. App: http://localhost:44544  (change APP_PORT in .env to use different port)$(RESET)"
 
 down: ## Stop all services
 @echo "$(YELLOW)Stopping WebCrawler Pro...$(RESET)"
@@ -38,7 +38,7 @@ docker compose down
 build: ## Build and start all services
 @echo "$(BLUE)Building and starting WebCrawler Pro...$(RESET)"
 docker compose up --build -d
-@echo "$(GREEN)✅ Build complete. Frontend: http://localhost:3000 | API: http://localhost:8000$(RESET)"
+@echo "$(GREEN)✅ Build complete. Frontend: http://localhost:44544 | API: http://localhost:4454400$(RESET)"
 
 logs: ## Follow logs from all services
 docker compose logs -f
