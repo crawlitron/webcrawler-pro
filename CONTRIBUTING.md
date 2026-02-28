@@ -42,11 +42,11 @@ This project adheres to a Code of Conduct based on respect and inclusivity. By p
 ```bash
 # 1. Fork the repository on GitHub
 # 2. Clone your fork
-git clone https://github.com/YOUR_USERNAME/webcrawler-pro.git
+git clone https://github.com/YOUR_crawlitron/webcrawler-pro.git
 cd webcrawler-pro
 
 # 3. Add the upstream remote
-git remote add upstream https://github.com/USERNAME/webcrawler-pro.git
+git remote add upstream https://github.com/crawlitron/webcrawler-pro.git
 
 # 4. Verify remotes
 git remote -v
@@ -311,6 +311,6 @@ git commit -m "chore: upgrade FastAPI to 0.110.0"
 
 ## ❓ Questions?
 
-Open a [Discussion](https://github.com/USERNAME/webcrawler-pro/discussions) on GitHub.
+Open a [Discussion](https://github.com/crawlitron/webcrawler-pro/discussions) on GitHub.
 
 Thank you for contributing to WebCrawler Pro! 🕷️

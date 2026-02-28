@@ -6,9 +6,9 @@
 
 *A powerful, self-hosted alternative to Screaming Frog — built for teams*
 
-[![CI/CD Pipeline](https://github.com/USERNAME/webcrawler-pro/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/USERNAME/webcrawler-pro/actions/workflows/docker-publish.yml)
+[![CI/CD Pipeline](https://github.com/crawlitron/webcrawler-pro/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/crawlitron/webcrawler-pro/actions/workflows/docker-publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://github.com/USERNAME/webcrawler-pro/pkgs/container/webcrawler-pro)
+[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://github.com/crawlitron/webcrawler-pro/pkgs/container/webcrawler-pro)
 [![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?logo=fastapi)](https://fastapi.tiangolo.com/)
@@ -60,7 +60,7 @@
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/USERNAME/webcrawler-pro.git && cd webcrawler-pro
+git clone https://github.com/crawlitron/webcrawler-pro.git && cd webcrawler-pro
 
 # 2. Configure environment
 cp .env.example .env   # Then edit .env with your values
@@ -89,7 +89,7 @@ make build
 ### 1. Clone & Configure
 
 ```bash
-git clone https://github.com/USERNAME/webcrawler-pro.git
+git clone https://github.com/crawlitron/webcrawler-pro.git
 cd webcrawler-pro
 cp .env.example .env
 ```
@@ -248,7 +248,7 @@ docker compose -f docker-compose.prod.yml logs -f
 ### Push to GitHub
 
 ```bash
-git remote add origin https://github.com/USERNAME/webcrawler-pro.git
+git remote add origin https://github.com/crawlitron/webcrawler-pro.git
 git branch -M main
 git push -u origin main
 ```
@@ -263,7 +263,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ```bash
 # Fork and clone
-git clone https://github.com/YOUR_USERNAME/webcrawler-pro.git
+git clone https://github.com/YOUR_crawlitron/webcrawler-pro.git
 
 # Create feature branch
 git checkout -b feature/your-feature-name
@@ -288,6 +288,6 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 **Built with ❤️ by the WebCrawler Pro Contributors**
 
-[Report Bug](https://github.com/USERNAME/webcrawler-pro/issues) · [Request Feature](https://github.com/USERNAME/webcrawler-pro/issues) · [Documentation](https://github.com/USERNAME/webcrawler-pro/wiki)
+[Report Bug](https://github.com/crawlitron/webcrawler-pro/issues) · [Request Feature](https://github.com/crawlitron/webcrawler-pro/issues) · [Documentation](https://github.com/crawlitron/webcrawler-pro/wiki)
 
 </div>

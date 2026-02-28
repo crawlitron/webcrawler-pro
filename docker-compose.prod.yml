@@ -34,7 +34,7 @@ services:
   # Backend API (FastAPI)
   # ===========================================================================
   backend:
-    image: ghcr.io/USERNAME/webcrawler-pro/backend:latest
+    image: ghcr.io/crawlitron/webcrawler-pro/backend:latest
     container_name: webcrawler_backend
     restart: unless-stopped
     env_file:
@@ -69,7 +69,7 @@ services:
   # Celery Worker
   # ===========================================================================
   worker:
-    image: ghcr.io/USERNAME/webcrawler-pro/backend:latest
+    image: ghcr.io/crawlitron/webcrawler-pro/backend:latest
     container_name: webcrawler_worker
     command: celery -A celery_worker worker --loglevel=info --concurrency=4
     restart: unless-stopped
@@ -99,7 +99,7 @@ services:
   # Frontend (Next.js)
   # ===========================================================================
   frontend:
-    image: ghcr.io/USERNAME/webcrawler-pro/frontend:latest
+    image: ghcr.io/crawlitron/webcrawler-pro/frontend:latest
     container_name: webcrawler_frontend
     restart: unless-stopped
     env_file:
