@@ -28,7 +28,7 @@ awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 up: ## Start all services in detached mode
 @echo "$(GREEN)Starting WebCrawler Pro...$(RESET)"
 docker compose up -d
-@echo "$(GREEN)✅ Services started. Frontend: http://localhost:3000 | API: http://localhost:8000$(RESET)"
+@echo "$(GREEN)✅ Services started. App: http://localhost:80  (change APP_PORT in .env to use different port)$(RESET)"
 
 down: ## Stop all services
 @echo "$(YELLOW)Stopping WebCrawler Pro...$(RESET)"
