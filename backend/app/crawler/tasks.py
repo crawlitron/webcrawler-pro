@@ -181,8 +181,8 @@ def run_crawl(self, crawl_id: int, start_url: str, max_urls: int):
                 crawl.error_message = str(e)
                 crawl.completed_at = datetime.utcnow()
                 db.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("DB rollback failed: %s", e)
         raise
     finally:
         db.close()

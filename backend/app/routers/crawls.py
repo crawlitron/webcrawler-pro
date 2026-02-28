@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 
 import csv
 import io
@@ -199,8 +201,8 @@ def cancel_crawl(crawl_id: int, db: Session = Depends(get_db)):
                 broker=_os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
             )
             celery_app.control.revoke(crawl.celery_task_id, terminate=True, signal="SIGTERM")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to revoke Celery task: %s", e)
     from datetime import datetime
     crawl.status = CrawlStatus.FAILED
     crawl.error_message = "Cancelled by user"
