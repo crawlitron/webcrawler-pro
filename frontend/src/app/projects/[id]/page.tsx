@@ -155,7 +155,7 @@ export default function ProjectPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-400 mb-6">
-        <a href="/" className="hover:text-blue-600">Projects</a>
+        <Link href="/" className="hover:text-blue-600">Projects</Link>
         <span>/</span>
         <span className="text-gray-700 font-medium">{project?.name}</span>
       </div>
@@ -164,7 +164,22 @@ export default function ProjectPage() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{project?.name}</h1>
-          <a href={project?.start_url} target="_blank" rel="noopener noreferrer"
+          {/* v0.4.0 Quick Navigation */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          <Link href={`/projects/${id}/analytics`}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors">
+            📊 Analytics
+          </Link>
+          <Link href={`/projects/${id}/urls`}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors">
+            🔍 URL Explorer
+          </Link>
+          <Link href={`/projects/${id}/settings`}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+            ⚙️ Settings
+          </Link>
+        </div>
+        <a href={project?.start_url} target="_blank" rel="noopener noreferrer"
             className="text-sm text-blue-500 hover:underline mt-1 inline-block">
             {project?.start_url}
           </a>

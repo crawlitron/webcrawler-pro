@@ -227,3 +227,107 @@ def _escape_xml(s: str) -> str:
     s = s.replace("<", "&lt;")
     s = s.replace(">", "&gt;")
     return s
+
+
+@router.get("/crawls/{crawl_id}/analytics/top-pages")
+def top_pages_by_issues(
+    crawl_id: int,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    """Top N pages by total issue count."""
+    _get_crawl_or_404(crawl_id, db)
+    rows = db.query(
+        Issue.page_id,
+        func.count(Issue.id).label("issue_count"),
+        func.sum(
+            func.cast(Issue.severity == "critical", db.bind.dialect.name == "postgresql" and func.cast(1, func.Integer) or 1)
+        ).label("c"),
+    ).filter(
+        Issue.crawl_id == crawl_id
+    ).group_by(Issue.page_id).order_by(
+        func.count(Issue.id).desc()
+    ).limit(limit).all()
+
+    results = []
+    for row in rows:
+        page = db.query(Page).filter(Page.id == row.page_id).first()
+        if not page:
+            continue
+        # Per-severity counts
+        sev_counts = db.query(
+            Issue.severity,
+            func.count(Issue.id).label("cnt")
+        ).filter(
+            Issue.crawl_id == crawl_id,
+            Issue.page_id == row.page_id,
+        ).group_by(Issue.severity).all()
+        critical = warning = info = 0
+        for sc in sev_counts:
+            if sc.severity.value == "critical":
+                critical = sc.cnt
+            elif sc.severity.value == "warning":
+                warning = sc.cnt
+            else:
+                info = sc.cnt
+        results.append({
+            "page_id": page.id,
+            "url": page.url,
+            "status_code": page.status_code,
+            "title": page.title,
+            "issue_count": row.issue_count,
+            "critical": critical,
+            "warning": warning,
+            "info": info,
+            "depth": page.depth,
+        })
+    return results
+
+
+@router.get("/projects/{project_id}/analytics/issue-trend")
+def issue_trend(
+    project_id: int,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    """Issue trend across the last N completed crawls for a project."""
+    from ..models import Project
+    if not db.query(Project).filter(Project.id == project_id).first():
+        raise HTTPException(404, "Project not found")
+    crawls = db.query(Crawl).filter(
+        Crawl.project_id == project_id,
+        Crawl.status == "completed",
+    ).order_by(Crawl.completed_at.asc()).limit(limit).all()
+    return [
+        {
+            "crawl_id": c.id,
+            "started_at": c.started_at.isoformat() if c.started_at else None,
+            "completed_at": c.completed_at.isoformat() if c.completed_at else None,
+            "total_pages": c.crawled_urls,
+            "critical_issues": c.critical_issues,
+            "warning_issues": c.warning_issues,
+            "info_issues": c.info_issues,
+            "total_issues": c.critical_issues + c.warning_issues + c.info_issues,
+        }
+        for c in crawls
+    ]
+
+
+@router.get("/crawls/{crawl_id}/analytics/issues-summary")
+def issues_summary(crawl_id: int, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """Percentage of pages with at least one issue."""
+    crawl = _get_crawl_or_404(crawl_id, db)
+    total_pages = db.query(Page).filter(Page.crawl_id == crawl_id).count()
+    pages_with_issues = db.query(
+        func.count(func.distinct(Issue.page_id))
+    ).filter(Issue.crawl_id == crawl_id).scalar() or 0
+    pct = round(pages_with_issues / total_pages * 100, 1) if total_pages > 0 else 0.0
+    return {
+        "total_pages": total_pages,
+        "pages_with_issues": pages_with_issues,
+        "pages_without_issues": total_pages - pages_with_issues,
+        "pct_with_issues": pct,
+        "critical_issues": crawl.critical_issues,
+        "warning_issues": crawl.warning_issues,
+        "info_issues": crawl.info_issues,
+    }

@@ -18,10 +18,37 @@ export interface Project {
   name: string;
   start_url: string;
   max_urls: number;
+  custom_user_agent?: string | null;
+  crawl_delay: number;
+  include_patterns?: string[] | null;
+  exclude_patterns?: string[] | null;
+  crawl_external_links: boolean;
   created_at: string;
   updated_at: string;
   last_crawl_status?: string;
   last_crawl_id?: number;
+}
+
+export interface ProjectCreate {
+  name: string;
+  start_url: string;
+  max_urls?: number;
+  custom_user_agent?: string | null;
+  crawl_delay?: number;
+  include_patterns?: string[] | null;
+  exclude_patterns?: string[] | null;
+  crawl_external_links?: boolean;
+}
+
+export interface ProjectUpdate {
+  name?: string;
+  start_url?: string;
+  max_urls?: number;
+  custom_user_agent?: string | null;
+  crawl_delay?: number;
+  include_patterns?: string[] | null;
+  exclude_patterns?: string[] | null;
+  crawl_external_links?: boolean;
 }
 
 export interface Crawl {
@@ -63,6 +90,7 @@ export interface Page {
   depth: number;
   crawled_at: string;
   issue_count: number;
+  extra_data?: Record<string, unknown>;
 }
 
 export interface PageListResponse {
@@ -120,6 +148,39 @@ export interface TopIssue {
   label: string;
 }
 
+export interface TopPage {
+  page_id: number;
+  url: string;
+  status_code?: number;
+  title?: string;
+  issue_count: number;
+  critical: number;
+  warning: number;
+  info: number;
+  depth: number;
+}
+
+export interface IssueTrendPoint {
+  crawl_id: number;
+  started_at?: string;
+  completed_at?: string;
+  total_pages: number;
+  critical_issues: number;
+  warning_issues: number;
+  info_issues: number;
+  total_issues: number;
+}
+
+export interface IssuesSummary {
+  total_pages: number;
+  pages_with_issues: number;
+  pages_without_issues: number;
+  pct_with_issues: number;
+  critical_issues: number;
+  warning_issues: number;
+  info_issues: number;
+}
+
 export interface ResponseTimesData {
   avg: number;
   p50: number;
@@ -149,8 +210,10 @@ export const api = {
   // ---- Projects ----
   getProjects: () => request<Project[]>("/api/projects"),
   getProject: (id: number) => request<Project>(`/api/projects/${id}`),
-  createProject: (data: { name: string; start_url: string; max_urls: number }) =>
+  createProject: (data: ProjectCreate) =>
     request<Project>("/api/projects", { method: "POST", body: JSON.stringify(data) }),
+  updateProject: (id: number, data: ProjectUpdate) =>
+    request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteProject: (id: number) =>
     request<void>(`/api/projects/${id}`, { method: "DELETE" }),
 
@@ -166,22 +229,46 @@ export const api = {
   // ---- Pages ----
   getPages: (
     crawlId: number,
-    params?: { page?: number; page_size?: number; status_code?: number; issue_type?: string; search?: string }
+    params?: {
+      page?: number;
+      page_size?: number;
+      status_code?: number;
+      status_class?: string;
+      content_type?: string;
+      is_indexable?: boolean;
+      has_issues?: boolean;
+      issue_type?: string;
+      search?: string;
+      sort_by?: string;
+      sort_dir?: string;
+    }
   ) => {
     const q = new URLSearchParams();
     if (params?.page) q.set("page", String(params.page));
     if (params?.page_size) q.set("page_size", String(params.page_size));
     if (params?.status_code) q.set("status_code", String(params.status_code));
+    if (params?.status_class) q.set("status_class", params.status_class);
+    if (params?.content_type) q.set("content_type", params.content_type);
+    if (params?.is_indexable !== undefined) q.set("is_indexable", String(params.is_indexable));
+    if (params?.has_issues !== undefined) q.set("has_issues", String(params.has_issues));
     if (params?.issue_type) q.set("issue_type", params.issue_type);
     if (params?.search) q.set("search", params.search);
+    if (params?.sort_by) q.set("sort_by", params.sort_by);
+    if (params?.sort_dir) q.set("sort_dir", params.sort_dir);
     return request<PageListResponse>(`/api/crawls/${crawlId}/pages?${q}`);
   },
+  getPageDetail: (crawlId: number, pageId: number) =>
+    request<Page>(`/api/crawls/${crawlId}/pages/${pageId}`),
+  getPageIssues: (crawlId: number, pageId: number) =>
+    request<Issue[]>(`/api/crawls/${crawlId}/pages/${pageId}/issues`),
 
   // ---- Issues ----
-  getIssues: (crawlId: number, severity?: string, issue_type?: string) => {
+  getIssues: (crawlId: number, params?: { severity?: string; issue_type?: string; page?: number; page_size?: number }) => {
     const q = new URLSearchParams();
-    if (severity) q.set("severity", severity);
-    if (issue_type) q.set("issue_type", issue_type);
+    if (params?.severity) q.set("severity", params.severity);
+    if (params?.issue_type) q.set("issue_type", params.issue_type);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
     return request<IssueListResponse>(`/api/crawls/${crawlId}/issues?${q}`);
   },
 
@@ -196,6 +283,12 @@ export const api = {
     request<ResponseTimesData>(`/api/crawls/${crawlId}/analytics/response-times`),
   getTopIssues: (crawlId: number, limit = 10) =>
     request<TopIssue[]>(`/api/crawls/${crawlId}/analytics/top-issues?limit=${limit}`),
+  getTopPages: (crawlId: number, limit = 10) =>
+    request<TopPage[]>(`/api/crawls/${crawlId}/analytics/top-pages?limit=${limit}`),
+  getIssueTrend: (projectId: number, limit = 10) =>
+    request<IssueTrendPoint[]>(`/api/projects/${projectId}/analytics/issue-trend?limit=${limit}`),
+  getIssuesSummary: (crawlId: number) =>
+    request<IssuesSummary>(`/api/crawls/${crawlId}/analytics/issues-summary`),
 
   // ---- Links ----
   getCrawlLinks: (

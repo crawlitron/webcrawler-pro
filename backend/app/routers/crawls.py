@@ -36,6 +36,7 @@ def _to_response(crawl: Crawl) -> CrawlResponse:
 
 @router.post("/projects/{project_id}/crawls", response_model=CrawlResponse, status_code=201)
 def start_crawl(project_id: int, db: Session = Depends(get_db)):
+    import json as _json
     from app.crawler.tasks import run_crawl
     proj = db.query(Project).filter(Project.id == project_id).first()
     if not proj:
@@ -45,11 +46,33 @@ def start_crawl(project_id: int, db: Session = Depends(get_db)):
     ).first()
     if running:
         raise HTTPException(409, "A crawl is already running for this project")
+    # Parse pattern lists from JSON strings
+    include_patterns = None
+    exclude_patterns = None
+    try:
+        if proj.include_patterns:
+            include_patterns = _json.loads(proj.include_patterns)
+    except (ValueError, TypeError):
+        include_patterns = None
+    try:
+        if proj.exclude_patterns:
+            exclude_patterns = _json.loads(proj.exclude_patterns)
+    except (ValueError, TypeError):
+        exclude_patterns = None
     crawl = Crawl(project_id=project_id, status=CrawlStatus.PENDING)
     db.add(crawl)
     db.commit()
     db.refresh(crawl)
-    task = run_crawl.delay(crawl.id, proj.start_url, proj.max_urls)
+    task = run_crawl.delay(
+        crawl.id,
+        proj.start_url,
+        proj.max_urls,
+        custom_user_agent=proj.custom_user_agent,
+        crawl_delay=proj.crawl_delay if proj.crawl_delay is not None else 0.5,
+        include_patterns=include_patterns or [],
+        exclude_patterns=exclude_patterns or [],
+        crawl_external_links=proj.crawl_external_links or False,
+    )
     crawl.celery_task_id = task.id
     db.commit()
     db.refresh(crawl)

@@ -1,10 +1,9 @@
-
 import re
 import json
 import scrapy
 from scrapy.linkextractors import LinkExtractor
 from urllib.parse import urlparse, urljoin
-from typing import Optional, Callable
+from typing import Optional, Callable, List
 
 
 class SEOSpider(scrapy.Spider):
@@ -12,31 +11,52 @@ class SEOSpider(scrapy.Spider):
     custom_settings = {
         "ROBOTSTXT_OBEY": True,
         "CONCURRENT_REQUESTS": 8,
-        "DOWNLOAD_DELAY": 0.1,
         "COOKIES_ENABLED": False,
         "TELNETCONSOLE_ENABLED": False,
         "LOG_ENABLED": False,
         "REDIRECT_ENABLED": True,
-        "REDIRECT_MAX_TIMES": 5,
+        "REDIRECT_MAX_TIMES": 10,
         "HTTPERROR_ALLOW_ALL": True,
-        "USER_AGENT": "WebCrawlerPro/2.0 (+https://webcrawlerpro.io/bot)",
         "DOWNLOAD_TIMEOUT": 15,
         "DEPTH_LIMIT": 10,
     }
 
-    def __init__(self, start_url: str, max_urls: int = 500,
-                 page_callback: Optional[Callable] = None, *args, **kwargs):
+    def __init__(
+        self,
+        start_url: str,
+        max_urls: int = 500,
+        page_callback: Optional[Callable] = None,
+        custom_user_agent: Optional[str] = None,
+        crawl_delay: float = 0.5,
+        include_patterns: Optional[List[str]] = None,
+        exclude_patterns: Optional[List[str]] = None,
+        crawl_external_links: bool = False,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.start_url = start_url
         self.max_urls = max_urls
         self.page_callback = page_callback
+        self.crawl_delay = crawl_delay
+        self.include_patterns = [re.compile(p) for p in (include_patterns or [])]
+        self.exclude_patterns = [re.compile(p) for p in (exclude_patterns or [])]
+        self.crawl_external_links = crawl_external_links
+
+        ua = custom_user_agent or "WebCrawlerPro/2.0 (+https://webcrawlerpro.io/bot)"
+        self.custom_settings = dict(self.custom_settings)  # copy class-level dict
+        self.custom_settings["USER_AGENT"] = ua
+        self.custom_settings["DOWNLOAD_DELAY"] = crawl_delay
+
         self.crawled_count = 0
         self.visited_urls = set()
         parsed = urlparse(start_url)
         self.base_domain = parsed.netloc
         self.start_urls = [start_url]
+
+        allowed_domains = None if crawl_external_links else [self.base_domain]
         self.link_extractor = LinkExtractor(
-            allow_domains=[self.base_domain],
+            allow_domains=allowed_domains,
             deny_extensions=[
                 "pdf", "jpg", "jpeg", "png", "gif", "svg", "ico", "css", "js",
                 "zip", "tar", "gz", "mp3", "mp4", "avi", "mov", "doc", "docx",
@@ -44,11 +64,26 @@ class SEOSpider(scrapy.Spider):
             ],
         )
 
+    def _url_allowed(self, url: str) -> bool:
+        """Check include/exclude patterns against URL."""
+        if self.exclude_patterns:
+            for pat in self.exclude_patterns:
+                if pat.search(url):
+                    return False
+        if self.include_patterns:
+            for pat in self.include_patterns:
+                if pat.search(url):
+                    return True
+            return False
+        return True
+
     def parse(self, response):
         if self.crawled_count >= self.max_urls:
             return
         url = response.url
         if url in self.visited_urls:
+            return
+        if not self._url_allowed(url):
             return
         self.visited_urls.add(url)
         self.crawled_count += 1
@@ -61,9 +96,11 @@ class SEOSpider(scrapy.Spider):
         ct = response.headers.get("Content-Type", b"").decode("utf-8", errors="ignore")
         if response.status == 200 and "text/html" in ct and self.crawled_count < self.max_urls:
             for link in self.link_extractor.extract_links(response):
-                if link.url not in self.visited_urls:
+                if link.url not in self.visited_urls and self._url_allowed(link.url):
                     yield scrapy.Request(
-                        link.url, callback=self.parse, errback=self.errback,
+                        link.url,
+                        callback=self.parse,
+                        errback=self.errback,
                         meta={"depth": response.meta.get("depth", 0) + 1},
                     )
 
@@ -79,6 +116,7 @@ class SEOSpider(scrapy.Spider):
                 "internal_links_count": 0, "external_links_count": 0,
                 "images_without_alt": 0, "word_count": 0,
                 "is_indexable": False, "redirect_url": None,
+                "redirect_chain": [],
                 "depth": failure.request.meta.get("depth", 0),
                 "error": str(failure.value),
                 "extra_data": {},
@@ -87,17 +125,59 @@ class SEOSpider(scrapy.Spider):
                 self.page_callback(data)
             yield data
 
+    def _extract_redirect_chain(self, response) -> list:
+        """Build redirect chain from response.history."""
+        chain = []
+        for r in response.history:
+            chain.append({
+                "url": r.url,
+                "status_code": r.status,
+            })
+        # Add final URL if there was a redirect
+        if response.history:
+            chain.append({
+                "url": response.url,
+                "status_code": response.status,
+            })
+        return chain
+
+    def _extract_images(self, response, base_url: str) -> list:
+        """Extract detailed image data from page."""
+        images = []
+        for img in response.css("img"):
+            src = img.attrib.get("src", "").strip()
+            if not src:
+                src = img.attrib.get("data-src", "").strip()
+            if src:
+                abs_src = urljoin(base_url, src)
+            else:
+                abs_src = ""
+            alt = img.attrib.get("alt", None)  # None = attribute missing, "" = empty
+            width = img.attrib.get("width", None)
+            height = img.attrib.get("height", None)
+            images.append({
+                "src": abs_src,
+                "alt": alt,
+                "width": width,
+                "height": height,
+                "has_alt": alt is not None,
+                "alt_empty": alt is not None and alt.strip() == "",
+                "alt_too_long": alt is not None and len(alt) > 100,
+                "missing_dimensions": width is None or height is None,
+            })
+        return images
+
     def _extract(self, response) -> dict:
         url = response.url
         status = response.status
         ct = response.headers.get(
-            "Content-Type",
-            b"").decode(
-            "utf-8",
-            errors="ignore").split(";")[0].strip()
+            "Content-Type", b""
+        ).decode("utf-8", errors="ignore").split(";")[0].strip()
         depth = response.meta.get("depth", 0)
         rt = response.meta.get("download_latency", 0.0)
 
+        # Redirect chain
+        redirect_chain = self._extract_redirect_chain(response)
         redirect_url = None
         if response.history:
             redirect_url = url
@@ -204,35 +284,35 @@ class SEOSpider(scrapy.Spider):
                 }
                 if p.netloc == base_netloc:
                     internal_links += 1
-                    if len(internal_link_list) < 200:  # cap stored links
+                    if len(internal_link_list) < 200:
                         internal_link_list.append(link_info)
                 else:
                     external_links += 1
-                    if len(external_link_list) < 100:  # cap stored links
+                    if len(external_link_list) < 100:
                         external_link_list.append(link_info)
             extra_data["internal_links"] = internal_link_list
             extra_data["external_links"] = external_link_list
             extra_data["nofollow_links_count"] = nofollow_count
 
-            # --- Images (enhanced) ---
-            total_images = 0
-            images_without_alt = 0
-            for img in response.css("img"):
-                total_images += 1
-                if not (img.attrib.get("alt") or "").strip():
-                    images_without_alt += 1
-            extra_data["total_images"] = total_images
+            # --- Images (detailed extraction for SEO analysis) ---
+            images_data = self._extract_images(response, url)
+            images_without_alt = sum(1 for img in images_data if not img["has_alt"])
+            extra_data["total_images"] = len(images_data)
+            extra_data["images"] = images_data[:200]  # cap at 200 stored
 
             # --- Word count + body text for keyword density ---
             body_text = " ".join(response.css("body *::text").getall())
             word_count = len(re.findall(r"\b\w+\b", body_text))
-            # Store trimmed body text (max 5000 chars) for keyword analysis
             extra_data["body_text"] = body_text[:5000] if body_text else ""
 
-            # --- Page depth (from URL structure) ---
+            # --- URL depth ---
             url_path = urlparse(url).path
             url_depth = url_path.rstrip("/").count("/")
             extra_data["url_depth"] = url_depth
+
+        # Store redirect chain in extra_data
+        extra_data["redirect_chain"] = redirect_chain
+        extra_data["redirect_hops"] = len(redirect_chain) - 1 if len(redirect_chain) > 1 else 0
 
         return {
             "url": url,
@@ -251,6 +331,7 @@ class SEOSpider(scrapy.Spider):
             "word_count": word_count,
             "is_indexable": is_indexable,
             "redirect_url": redirect_url,
+            "redirect_chain": redirect_chain,
             "depth": depth,
             "extra_data": extra_data,
         }

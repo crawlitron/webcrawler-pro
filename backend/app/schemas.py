@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
@@ -9,6 +8,22 @@ class ProjectCreate(BaseModel):
     name: str
     start_url: str
     max_urls: int = 500
+    custom_user_agent: Optional[str] = None
+    crawl_delay: float = 0.5
+    include_patterns: Optional[List[str]] = None
+    exclude_patterns: Optional[List[str]] = None
+    crawl_external_links: bool = False
+
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    start_url: Optional[str] = None
+    max_urls: Optional[int] = None
+    custom_user_agent: Optional[str] = None
+    crawl_delay: Optional[float] = None
+    include_patterns: Optional[List[str]] = None
+    exclude_patterns: Optional[List[str]] = None
+    crawl_external_links: Optional[bool] = None
 
 
 class ProjectResponse(BaseModel):
@@ -16,6 +31,11 @@ class ProjectResponse(BaseModel):
     name: str
     start_url: str
     max_urls: int
+    custom_user_agent: Optional[str] = None
+    crawl_delay: float = 0.5
+    include_patterns: Optional[List[str]] = None
+    exclude_patterns: Optional[List[str]] = None
+    crawl_external_links: bool = False
     created_at: datetime
     updated_at: datetime
     last_crawl_status: Optional[str] = None
@@ -63,6 +83,7 @@ class PageResponse(BaseModel):
     depth: int = 0
     crawled_at: datetime
     issue_count: int = 0
+    extra_data: Optional[dict] = None
     model_config = {"from_attributes": True}
 
 

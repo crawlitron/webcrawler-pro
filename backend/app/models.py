@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, Float, Boolean, DateTime, ForeignKey, Enum, JSON
 from sqlalchemy.orm import relationship
@@ -25,6 +24,12 @@ class Project(Base):
     name = Column(String(255), nullable=False)
     start_url = Column(String(2048), nullable=False)
     max_urls = Column(Integer, default=500)
+    # v0.4.0 crawl config
+    custom_user_agent = Column(String(512), nullable=True)
+    crawl_delay = Column(Float, default=0.5)
+    include_patterns = Column(Text, nullable=True)   # JSON array of regex strings
+    exclude_patterns = Column(Text, nullable=True)   # JSON array of regex strings
+    crawl_external_links = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     crawls = relationship("Crawl", back_populates="project", cascade="all, delete-orphan")

@@ -1,4 +1,3 @@
-
 import os
 import time
 import logging
@@ -13,14 +12,38 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def run_migrations():
+    """Idempotent schema migrations — add new columns if they do not exist."""
+    migrations = [
+        # v0.4.0: extended crawl configuration
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS custom_user_agent VARCHAR(512)",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS crawl_delay FLOAT DEFAULT 0.5",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS include_patterns TEXT",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS exclude_patterns TEXT",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS crawl_external_links BOOLEAN DEFAULT FALSE",
+        # v0.4.0: extra_data JSON column for pages (stores images, redirect chains, etc.)
+        "ALTER TABLE pages ADD COLUMN IF NOT EXISTS extra_data JSON",
+    ]
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception as e:
+                logger.warning("Migration skipped (%s): %s", sql[:60], e)
+                conn.rollback()
+    logger.info("Database migrations applied (v0.4.0)")
+
+
 def create_tables(retries=10, delay=3):
     for i in range(retries):
         try:
             Base.metadata.create_all(bind=engine)
-            logger.info("Database tables created successfully")
+            logger.info("Database tables created/verified successfully")
+            run_migrations()
             return
         except Exception as e:
-            logger.warning(f"DB not ready (attempt {i + 1}/{retries}): {e}")
+            logger.warning("DB not ready (attempt %d/%d): %s", i + 1, retries, e)
             time.sleep(delay)
     raise RuntimeError("Could not connect to database after multiple retries")
 
@@ -34,7 +57,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="WebCrawler Pro API",
     description="SEO Crawler API — Screaming Frog alternative",
-    version="2.0.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -46,7 +69,7 @@ app.add_middleware(
         os.getenv("FRONTEND_URL", "http://localhost:3000"),
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
 )
 
@@ -61,11 +84,11 @@ def health():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        return {"status": "healthy", "db": "connected"}
+        return {"status": "healthy", "db": "connected", "version": "0.4.0"}
     except Exception as e:
         return {"status": "unhealthy", "db": str(e)}
 
 
 @app.get("/")
 def root():
-    return {"name": "WebCrawler Pro", "version": "1.0.0", "docs": "/docs"}
+    return {"name": "WebCrawler Pro", "version": "0.4.0", "docs": "/docs"}

@@ -1,4 +1,3 @@
-
 import os
 import logging
 from datetime import datetime
@@ -27,7 +26,16 @@ celery_app.conf.update(
 logger = logging.getLogger(__name__)
 
 
-def _run_spider(start_url: str, max_urls: int, q: Queue):
+def _run_spider(
+    start_url: str,
+    max_urls: int,
+    q: Queue,
+    custom_user_agent: str = None,
+    crawl_delay: float = 0.5,
+    include_patterns: list = None,
+    exclude_patterns: list = None,
+    crawl_external_links: bool = False,
+):
     """Run Scrapy in a child process (Twisted reactor can only start once)."""
     import logging as _log
     from scrapy.crawler import CrawlerProcess
@@ -42,28 +50,50 @@ def _run_spider(start_url: str, max_urls: int, q: Queue):
     def collect(data):
         results.append(data)
 
+    ua = custom_user_agent or "WebCrawlerPro/2.0 (+https://webcrawlerpro.io/bot)"
+
     settings = {
         "ROBOTSTXT_OBEY": True,
         "CONCURRENT_REQUESTS": 8,
-        "DOWNLOAD_DELAY": 0.1,
+        "DOWNLOAD_DELAY": crawl_delay,
         "COOKIES_ENABLED": False,
         "TELNETCONSOLE_ENABLED": False,
         "LOG_ENABLED": False,
         "REDIRECT_ENABLED": True,
-        "REDIRECT_MAX_TIMES": 5,
+        "REDIRECT_MAX_TIMES": 10,
         "HTTPERROR_ALLOW_ALL": True,
-        "USER_AGENT": "WebCrawlerPro/1.0",
+        "USER_AGENT": ua,
         "DOWNLOAD_TIMEOUT": 15,
         "DEPTH_LIMIT": 10,
     }
     proc = CrawlerProcess(settings)
-    proc.crawl(SEOSpider, start_url=start_url, max_urls=max_urls, page_callback=collect)
+    proc.crawl(
+        SEOSpider,
+        start_url=start_url,
+        max_urls=max_urls,
+        page_callback=collect,
+        custom_user_agent=custom_user_agent,
+        crawl_delay=crawl_delay,
+        include_patterns=include_patterns or [],
+        exclude_patterns=exclude_patterns or [],
+        crawl_external_links=crawl_external_links,
+    )
     proc.start()
     q.put(results)
 
 
 @celery_app.task(bind=True, name="tasks.run_crawl", max_retries=1)
-def run_crawl(self, crawl_id: int, start_url: str, max_urls: int):
+def run_crawl(
+    self,
+    crawl_id: int,
+    start_url: str,
+    max_urls: int,
+    custom_user_agent: str = None,
+    crawl_delay: float = 0.5,
+    include_patterns: list = None,
+    exclude_patterns: list = None,
+    crawl_external_links: bool = False,
+):
     """Celery task: crawl a site and store results in PostgreSQL."""
     from app.database import SessionLocal
     from app.models import Crawl, Page, Issue, CrawlStatus, IssueSeverity
@@ -83,16 +113,26 @@ def run_crawl(self, crawl_id: int, start_url: str, max_urls: int):
 
         # Run spider in subprocess
         q = Queue()
-        p = Process(target=_run_spider, args=(start_url, max_urls, q))
+        p = Process(
+            target=_run_spider,
+            args=(start_url, max_urls, q),
+            kwargs={
+                "custom_user_agent": custom_user_agent,
+                "crawl_delay": crawl_delay,
+                "include_patterns": include_patterns or [],
+                "exclude_patterns": exclude_patterns or [],
+                "crawl_external_links": crawl_external_links,
+            },
+        )
         p.start()
         p.join(timeout=3600)
         if p.exitcode != 0:
-            raise RuntimeError(f"Spider process exited with code {p.exitcode}")
+            raise RuntimeError("Spider process exited with code {}".format(p.exitcode))
         if q.empty():
             raise RuntimeError("Spider returned no results")
 
         pages_data = q.get()
-        logger.info(f"Crawl {crawl_id}: spider returned {len(pages_data)} pages")
+        logger.info("Crawl %d: spider returned %d pages", crawl_id, len(pages_data))
 
         db.expire_all()
         crawl = db.query(Crawl).filter(Crawl.id == crawl_id).first()
@@ -106,6 +146,13 @@ def run_crawl(self, crawl_id: int, start_url: str, max_urls: int):
                     n_failed += 1
                 else:
                     n_crawled += 1
+
+                # Build extra_data - merge spider extra_data with redirect chain
+                spider_extra = pd.get("extra_data") or {}
+                redirect_chain = pd.get("redirect_chain", [])
+                spider_extra["redirect_chain"] = redirect_chain
+                spider_extra["redirect_hops"] = pd.get("redirect_hops", len(redirect_chain) - 1 if len(redirect_chain) > 1 else 0)
+                spider_extra["h1_count"] = pd.get("h1_count", 0)
 
                 page = Page(
                     crawl_id=crawl_id,
@@ -125,7 +172,7 @@ def run_crawl(self, crawl_id: int, start_url: str, max_urls: int):
                     is_indexable=pd.get("is_indexable", True),
                     redirect_url=pd.get("redirect_url"),
                     depth=pd.get("depth", 0),
-                    extra_data={"h1_count": pd.get("h1_count", 0)},
+                    extra_data=spider_extra,
                 )
                 db.add(page)
                 db.flush()
@@ -156,8 +203,30 @@ def run_crawl(self, crawl_id: int, start_url: str, max_urls: int):
                     db.commit()
 
             except Exception as e:
-                logger.error(f"Error processing page {pd.get('url')}: {e}")
+                logger.error("Error processing page %s: %s", pd.get("url"), e)
                 db.rollback()
+
+        # --- Post-crawl: Duplicate content detection ---
+        try:
+            dup_count = analyzer.analyze_duplicates(crawl_id, db)
+            if dup_count > 0:
+                logger.info("Crawl %d: found %d duplicate content issues", crawl_id, dup_count)
+                # Re-count all warning issues (duplicates are warnings)
+                from app.models import IssueSeverity as IS
+                from sqlalchemy import func
+                counts = db.query(
+                    IS, func.count(Issue.id)
+                ).filter(Issue.crawl_id == crawl_id).group_by(Issue.severity).all()
+                n_critical = n_warning = n_info = 0
+                for sev, cnt in counts:
+                    if sev == IS.CRITICAL:
+                        n_critical = cnt
+                    elif sev == IS.WARNING:
+                        n_warning = cnt
+                    else:
+                        n_info = cnt
+        except Exception as e:
+            logger.error("Duplicate analysis failed for crawl %d: %s", crawl_id, e)
 
         crawl = db.query(Crawl).filter(Crawl.id == crawl_id).first()
         crawl.status = CrawlStatus.COMPLETED
@@ -172,7 +241,7 @@ def run_crawl(self, crawl_id: int, start_url: str, max_urls: int):
         return {"status": "completed", "pages": n_crawled}
 
     except Exception as e:
-        logger.error(f"Crawl {crawl_id} failed: {e}")
+        logger.error("Crawl %d failed: %s", crawl_id, e)
         try:
             db.rollback()
             crawl = db.query(Crawl).filter(Crawl.id == crawl_id).first()
@@ -181,8 +250,8 @@ def run_crawl(self, crawl_id: int, start_url: str, max_urls: int):
                 crawl.error_message = str(e)
                 crawl.completed_at = datetime.utcnow()
                 db.commit()
-        except Exception as e:
-            logger.warning("DB rollback failed: %s", e)
+        except Exception as e2:
+            logger.warning("DB rollback failed: %s", e2)
         raise
     finally:
         db.close()
