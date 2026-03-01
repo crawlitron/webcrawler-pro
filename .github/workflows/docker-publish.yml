@@ -174,11 +174,10 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
+          # Only install build tools needed for Python packages (psycopg2 etc.)
+          # Playwright browser deps are handled by --with-deps flag below
           sudo apt-get install -y --no-install-recommends \
-            libpq-dev gcc build-essential \
-            libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
-            libcups2 libdrm2 libxkbcommon0 libxcomposite1 \
-            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
+            libpq-dev gcc build-essential
 
       - name: Install Python dependencies
         working-directory: ./backend
