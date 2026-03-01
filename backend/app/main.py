@@ -182,13 +182,32 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+def _get_cors_origins() -> list:
+    """Build CORS origins list from environment.
+    Supports wildcard '*' for development or Nginx-proxied deployments.
+    """
+    cors_env = os.getenv("CORS_ORIGINS", "")
+    if cors_env == "*":
+        return ["*"]
+    origins = [
+        "http://localhost:3000",
+        "http://localhost:44544",
+        "http://frontend:3000",
+    ]
+    if cors_env:
+        for o in cors_env.split(","):
+            o = o.strip()
+            if o and o not in origins:
+                origins.append(o)
+    frontend_url = os.getenv("FRONTEND_URL", "")
+    if frontend_url and frontend_url not in origins:
+        origins.append(frontend_url)
+    return origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://frontend:3000",
-        os.getenv("FRONTEND_URL", "http://localhost:3000"),
-    ],
+    allow_origins=_get_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],

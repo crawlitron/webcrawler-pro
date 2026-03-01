@@ -2,7 +2,8 @@
 const TOKEN_KEY = 'wcp_access_token';
 const USER_KEY  = 'wcp_user';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Empty string = relative URLs via Nginx proxy (works on any host/domain)
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 export interface User {
   id: number;
