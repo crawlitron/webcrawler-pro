@@ -178,3 +178,99 @@ def change_password(data: ChangePassword, current_user: User = Depends(require_u
     current_user.hashed_password = hash_password(data.new_password)
     db.commit()
     return {"message": "Password changed successfully"}
+
+
+# ── Google OAuth ──────────────────────────────────────────────────────────────
+
+class GoogleCallbackParams(BaseModel):
+    code: str
+    state: Optional[str] = None
+
+
+@router.get("/google")
+def google_login():
+    """Redirect user to Google OAuth consent screen."""
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+    if not client_id:
+        raise HTTPException(400, "Google OAuth not configured (GOOGLE_CLIENT_ID missing)")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI",
+                             os.getenv("APP_URL", "http://localhost:44544") + "/api/auth/google/callback")
+    import urllib.parse
+    params = urllib.parse.urlencode({
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account",
+    })
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
+
+
+@router.get("/google/callback")
+def google_callback(code: str, state: Optional[str] = None, db: Session = Depends(get_db)):
+    """Exchange Google auth code for tokens, create/login user."""
+    import httpx
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        raise HTTPException(400, "Google OAuth not configured")
+
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI",
+                             os.getenv("APP_URL", "http://localhost:44544") + "/api/auth/google/callback")
+    frontend_url = os.getenv("APP_URL", "http://localhost:44544")
+
+    # Exchange code for tokens
+    try:
+        resp = httpx.post("https://oauth2.googleapis.com/token", data={
+            "code": code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        }, timeout=10)
+        resp.raise_for_status()
+        token_data = resp.json()
+    except Exception as e:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(f"{frontend_url}/auth/login?error=google_token_failed")
+
+    # Get user info
+    try:
+        userinfo = httpx.get("https://www.googleapis.com/oauth2/v2/userinfo",
+                             headers={"Authorization": f"Bearer {token_data["access_token"]}"},
+                             timeout=10).json()
+    except Exception:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(f"{frontend_url}/auth/login?error=google_userinfo_failed")
+
+    google_email = userinfo.get("email", "")
+    if not google_email:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(f"{frontend_url}/auth/login?error=no_email")
+
+    # Find or create user
+    user = db.query(User).filter(User.email == google_email).first()
+    if not user:
+        import secrets
+        user = User(
+            email=google_email,
+            hashed_password=hash_password(secrets.token_urlsafe(32)),  # random pw, can't login with pw
+            full_name=userinfo.get("name", google_email.split("@")[0]),
+            is_active=True,
+            is_admin=False,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    user.last_login = datetime.utcnow()
+    db.commit()
+
+    # Create JWT and redirect to frontend
+    jwt_token = create_access_token({"sub": str(user.id)})
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(
+        f"{frontend_url}/auth/callback?token={jwt_token}&email={google_email}&name={userinfo.get('name', '')}"
+    )

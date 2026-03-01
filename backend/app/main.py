@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 def run_migrations():
     """Idempotent schema migrations — add new columns/tables if they do not exist."""
     migrations = [
+        "CREATE TABLE IF NOT EXISTS app_settings (key VARCHAR(255) PRIMARY KEY, value TEXT, is_sensitive BOOLEAN DEFAULT FALSE, updated_at TIMESTAMP)",
         # v0.4.0: extended crawl configuration
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS custom_user_agent VARCHAR(512)",
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS crawl_delay FLOAT DEFAULT 0.5",
@@ -263,3 +264,29 @@ def health():
 @app.get("/")
 def root():
     return {"name": "WebCrawler Pro", "version": "0.8.0", "docs": "/docs"}
+
+
+@app.on_event("startup")
+async def seed_test_account():
+    """Create default test account wcp@wcp.local / wcp on first start."""
+    try:
+        from .routers.auth import hash_password
+        from .models import User
+        db = next(iter([SessionLocal()]))
+        try:
+            exists = db.query(User).filter(User.email == "wcp@wcp.local").first()
+            if not exists:
+                test_user = User(
+                    email="wcp@wcp.local",
+                    hashed_password=hash_password("wcp"),
+                    full_name="Test User (WCP)",
+                    is_admin=False,
+                    is_active=True,
+                )
+                db.add(test_user)
+                db.commit()
+                logger.info("✅ Test account created: wcp@wcp.local / wcp")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Could not seed test account: {e}")
