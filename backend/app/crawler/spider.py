@@ -31,11 +31,15 @@ class SEOSpider(scrapy.Spider):
         include_patterns: Optional[List[str]] = None,
         exclude_patterns: Optional[List[str]] = None,
         crawl_external_links: bool = False,
+        use_js_rendering: bool = False,
+        js_wait_time: float = 2.0,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.start_url = start_url
+        self.use_js_rendering = use_js_rendering
+        self.js_wait_time = js_wait_time
         self.max_urls = max_urls
         self.page_callback = page_callback
         self.crawl_delay = crawl_delay
@@ -54,6 +58,10 @@ class SEOSpider(scrapy.Spider):
         self.base_domain = parsed.netloc
         self.start_urls = [start_url]
 
+    def start_requests(self):
+        for url in self.start_urls:
+            yield self.make_request(url, callback=self.parse, errback=self.errback, meta={'depth': 0})
+
         allowed_domains = None if crawl_external_links else [self.base_domain]
         self.link_extractor = LinkExtractor(
             allow_domains=allowed_domains,
@@ -62,6 +70,29 @@ class SEOSpider(scrapy.Spider):
                 "zip", "tar", "gz", "mp3", "mp4", "avi", "mov", "doc", "docx",
                 "xls", "xlsx", "ppt", "pptx", "exe", "dmg", "woff", "woff2", "ttf",
             ],
+        )
+
+
+    def make_request(self, url: str, callback=None, errback=None, meta: dict = None):
+        """Build a Scrapy Request, optionally using Playwright for JS rendering."""
+        base_meta = dict(meta or {})
+        if self.use_js_rendering:
+            try:
+                from scrapy_playwright.page import PageMethod
+                base_meta.update({
+                    'playwright': True,
+                    'playwright_include_page': True,
+                    'playwright_page_methods': [
+                        PageMethod('wait_for_load_state', 'networkidle'),
+                    ],
+                })
+            except ImportError:
+                pass  # Fall back to normal request if scrapy-playwright not installed
+        return scrapy.Request(
+            url,
+            callback=callback or self.parse,
+            errback=errback or self.errback,
+            meta=base_meta,
         )
 
     def _url_allowed(self, url: str) -> bool:
@@ -96,7 +127,7 @@ class SEOSpider(scrapy.Spider):
         if response.status == 200 and "text/html" in ct and self.crawled_count < self.max_urls:
             for link in self.link_extractor.extract_links(response):
                 if link.url not in self.visited_urls and self._url_allowed(link.url):
-                    yield scrapy.Request(
+                    yield self.make_request(
                         link.url,
                         callback=self.parse,
                         errback=self.errback,

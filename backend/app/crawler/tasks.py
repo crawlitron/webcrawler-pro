@@ -35,6 +35,8 @@ def _run_spider(
     include_patterns: list = None,
     exclude_patterns: list = None,
     crawl_external_links: bool = False,
+    use_js_rendering: bool = False,
+    js_wait_time: float = 2.0,
 ):
     """Run Scrapy in a child process (Twisted reactor can only start once)."""
     import logging as _log
@@ -66,6 +68,17 @@ def _run_spider(
         "DOWNLOAD_TIMEOUT": 15,
         "DEPTH_LIMIT": 10,
     }
+    # v0.8.0 Feature 1: Playwright JS rendering settings
+    if use_js_rendering:
+        settings.update({
+            "DOWNLOAD_HANDLERS": {
+                "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+                "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            },
+            "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
+            "PLAYWRIGHT_BROWSER_TYPE": "chromium",
+            "PLAYWRIGHT_LAUNCH_OPTIONS": {"headless": True, "args": ["--no-sandbox"]},
+        })
     proc = CrawlerProcess(settings)
     proc.crawl(
         SEOSpider,
@@ -77,6 +90,8 @@ def _run_spider(
         include_patterns=include_patterns or [],
         exclude_patterns=exclude_patterns or [],
         crawl_external_links=crawl_external_links,
+        use_js_rendering=use_js_rendering,
+        js_wait_time=js_wait_time,
     )
     proc.start()
     q.put(results)
@@ -145,6 +160,8 @@ def run_crawl(
     include_patterns: list = None,
     exclude_patterns: list = None,
     crawl_external_links: bool = False,
+    use_js_rendering: bool = False,
+    js_wait_time: float = 2.0,
 ):
     """Celery task: crawl a site and store results in PostgreSQL."""
     from app.database import SessionLocal
@@ -174,6 +191,8 @@ def run_crawl(
                 "include_patterns": include_patterns or [],
                 "exclude_patterns": exclude_patterns or [],
                 "crawl_external_links": crawl_external_links,
+                "use_js_rendering": use_js_rendering,
+                "js_wait_time": js_wait_time,
             },
         )
         p.start()
@@ -491,5 +510,143 @@ def run_crawl(
         except Exception as e2:
             logger.warning("DB rollback failed: %s", e2)
         raise
+    finally:
+        db.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v0.8.0 Feature 2: Core Web Vitals measurement task
+# ═══════════════════════════════════════════════════════════════════════
+
+@celery_app.task(bind=True, name="tasks.measure_page_cwv", max_retries=2)
+def measure_page_cwv(self, page_id: int, url: str):
+    """Measure Core Web Vitals for a single page and persist to DB."""
+    from app.database import SessionLocal
+    from app.models import Page as PageModel
+    from app.crawler.cwv_analyzer import measure_cwv_sync, score_cwv
+
+    db = SessionLocal()
+    try:
+        metrics = measure_cwv_sync(url, timeout=30)
+        if not metrics:
+            return {"status": "no_metrics", "url": url}
+        scores = score_cwv(metrics)
+        page = db.query(PageModel).filter(PageModel.id == page_id).first()
+        if page:
+            page.lcp = metrics.get("lcp")
+            page.cls = metrics.get("cls")
+            page.fcp = metrics.get("fcp")
+            page.ttfb = metrics.get("ttfb")
+            page.tbt = metrics.get("tbt")
+            page.dom_size = metrics.get("dom_size")
+            page.cwv_score = scores.get("overall", "unknown")
+            db.commit()
+        return {"status": "ok", "url": url, "overall": scores.get("overall")}
+    except Exception as e:
+        logger.error("CWV measurement failed page_id=%d url=%s: %s", page_id, url, e)
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="tasks.measure_crawl_cwv", max_retries=1)
+def measure_crawl_cwv(self, crawl_id: int, top_n: int = 50):
+    """Queue CWV measurement for the top N pages of a crawl."""
+    from app.database import SessionLocal
+    from app.models import Page as PageModel
+
+    db = SessionLocal()
+    try:
+        pages = (
+            db.query(PageModel)
+            .filter(
+                PageModel.crawl_id == crawl_id,
+                PageModel.status_code == 200,
+            )
+            .order_by(PageModel.internal_links_count.desc())
+            .limit(top_n)
+            .all()
+        )
+        for page in pages:
+            measure_page_cwv.apply_async(
+                args=[page.id, page.url],
+                countdown=1,
+                soft_time_limit=60,
+            )
+        return {"status": "queued", "count": len(pages)}
+    finally:
+        db.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v0.8.0 Feature 4: GSC daily rank sync task
+# ═══════════════════════════════════════════════════════════════════════
+
+@celery_app.task(bind=True, name="tasks.sync_gsc_rankings", max_retries=2)
+def sync_gsc_rankings(self):
+    """Daily Celery Beat task: sync GSC keyword rankings for all linked projects."""
+    from app.database import SessionLocal
+    from app.models import GSCConnection, KeywordRanking
+    from datetime import date
+
+    db = SessionLocal()
+    synced = 0
+    errors = 0
+    try:
+        connections = db.query(GSCConnection).filter(
+            GSCConnection.project_id.isnot(None),
+            GSCConnection.site_url != "",
+            GSCConnection.access_token.isnot(None),
+        ).all()
+
+        for conn in connections:
+            try:
+                from app.integrations.google_search_console import GSCClient
+                client = GSCClient(
+                    access_token=conn.access_token,
+                    refresh_token=conn.refresh_token,
+                    token_expiry=conn.token_expiry,
+                )
+                rows = client.get_keyword_rankings(conn.site_url, days=1)
+                today = date.today()
+                for row in rows:
+                    kw = row.get("query")
+                    row_date_str = row.get("date") or str(today)
+                    try:
+                        row_date = date.fromisoformat(row_date_str)
+                    except (ValueError, TypeError):
+                        row_date = today
+                    existing = db.query(KeywordRanking).filter(
+                        KeywordRanking.project_id == conn.project_id,
+                        KeywordRanking.keyword == kw,
+                        KeywordRanking.date == row_date,
+                    ).first()
+                    if existing:
+                        existing.position = row.get("position")
+                        existing.clicks = row.get("clicks", 0)
+                        existing.impressions = row.get("impressions", 0)
+                        existing.ctr = row.get("ctr")
+                        existing.url = row.get("page")
+                    else:
+                        db.add(KeywordRanking(
+                            project_id=conn.project_id,
+                            keyword=kw,
+                            date=row_date,
+                            position=row.get("position"),
+                            clicks=row.get("clicks", 0),
+                            impressions=row.get("impressions", 0),
+                            ctr=row.get("ctr"),
+                            url=row.get("page"),
+                        ))
+                db.commit()
+                synced += 1
+                logger.info("GSC sync OK: project_id=%d site=%s rows=%d",
+                            conn.project_id, conn.site_url, len(rows))
+            except Exception as e:
+                errors += 1
+                logger.error("GSC sync failed for project_id=%d: %s", conn.project_id, e)
+                db.rollback()
+
+        return {"status": "done", "synced": synced, "errors": errors}
     finally:
         db.close()

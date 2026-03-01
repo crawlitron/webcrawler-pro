@@ -11,5 +11,17 @@ pydantic==2.7.1
 python-multipart==0.0.9
 w3lib==2.1.2
 tldextract==5.1.2
-aiofiles==23.2.1reportlab>=4.0.0
+aiofiles==23.2.1
+reportlab>=4.0.0
 aiosmtplib>=3.0.0
+# v0.8.0 Feature 1: JS Rendering
+scrapy-playwright>=0.0.34
+playwright>=1.40.0
+# v0.8.0 Feature 3: Auth / Multi-User
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+# v0.8.0 Feature 4: Google Search Console
+google-auth>=2.0.0
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.100.0
+cryptography>=41.0.0

@@ -24,6 +24,8 @@ export interface Project {
   exclude_patterns?: string[] | null;
   crawl_external_links: boolean;
   crawl_schedule?: string | null;
+  use_js_rendering?: boolean;   // v0.8.0
+  js_wait_time?: number;        // v0.8.0
   created_at: string;
   updated_at: string;
   last_crawl_status?: string;
@@ -40,6 +42,8 @@ export interface ProjectCreate {
   exclude_patterns?: string[] | null;
   crawl_external_links?: boolean;
   crawl_schedule?: string | null;
+  use_js_rendering?: boolean;   // v0.8.0
+  js_wait_time?: number;        // v0.8.0
 }
 
 export interface ProjectUpdate {
@@ -52,6 +56,8 @@ export interface ProjectUpdate {
   exclude_patterns?: string[] | null;
   crawl_external_links?: boolean;
   crawl_schedule?: string | null;
+  use_js_rendering?: boolean;   // v0.8.0
+  js_wait_time?: number;        // v0.8.0
 }
 
 export interface Crawl {
@@ -597,3 +603,93 @@ export const api = {
       method: "POST",
     }),
 };
+
+// ============================================================
+// v0.8.0 Types — Auth / Teams / CWV / GSC / Rank Tracking
+// ============================================================
+
+export interface User {
+  id: number;
+  email: string;
+  full_name?: string;
+  is_active: boolean;
+  is_admin: boolean;
+  created_at: string;
+  last_login?: string;
+}
+
+export interface Team {
+  id: number;
+  name: string;
+  slug: string;
+  owner_id: number;
+  max_projects: number;
+  max_crawl_urls: number;
+  created_at: string;
+  member_count?: number;
+  my_role?: string;
+}
+
+export interface TeamMember {
+  id: number;
+  user_id: number;
+  email: string;
+  full_name?: string;
+  role: string;
+  joined_at: string;
+}
+
+export interface CWVPage {
+  id: number;
+  url: string;
+  lcp?: number;
+  cls?: number;
+  fcp?: number;
+  ttfb?: number;
+  tbt?: number;
+  dom_size?: number;
+  cwv_score?: string;
+}
+
+export interface CWVSummary {
+  pages: CWVPage[];
+  avg_lcp?: number;
+  avg_cls?: number;
+  avg_fcp?: number;
+  p75_lcp?: number;
+  distribution?: Record<string, Record<string, number>>;
+}
+
+export interface KeywordRanking {
+  id: number;
+  keyword: string;
+  date: string;
+  position: number;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  url?: string;
+}
+
+export interface GSCAnalytics {
+  site_url: string;
+  period_days: number;
+  total_clicks: number;
+  total_impressions: number;
+  avg_ctr: string;
+  avg_position: string;
+  rows: Array<{
+    page?: string;
+    date?: string;
+    clicks: number;
+    impressions: number;
+    ctr: number;
+    position: number;
+  }>;
+}
+
+export interface GSCStatus {
+  connected: boolean;
+  site_url?: string;
+  token_expiry?: string;
+}

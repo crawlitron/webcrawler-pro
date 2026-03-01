@@ -34,6 +34,9 @@ class Project(Base):
     crawl_schedule = Column(String(20), nullable=True)  # null | daily | weekly | monthly
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # v0.8.0 Feature 1: JavaScript Rendering
+    use_js_rendering = Column(Boolean, default=False)
+    js_wait_time = Column(Float, default=2.0)
     crawls = relationship("Crawl", back_populates="project", cascade="all, delete-orphan")
 
 
@@ -82,6 +85,14 @@ class Page(Base):
     extra_data = Column(JSON, nullable=True)
     # v0.5.0
     performance_score = Column(Integer, nullable=True)  # 0-100
+    # v0.8.0 Feature 2: Core Web Vitals
+    lcp = Column(Float, nullable=True)
+    cls = Column(Float, nullable=True)
+    fcp = Column(Float, nullable=True)
+    ttfb = Column(Float, nullable=True)
+    tbt = Column(Float, nullable=True)
+    dom_size = Column(Integer, nullable=True)
+    cwv_score = Column(String(50), nullable=True)
     crawl = relationship("Crawl", back_populates="pages")
     issues = relationship("Issue", back_populates="page", cascade="all, delete-orphan")
 
@@ -118,3 +129,88 @@ class AlertConfig(Base):
     enabled = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     project = relationship('Project', backref='alert_configs')
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v0.8.0 Feature 3: Multi-User / Teams
+# ═══════════════════════════════════════════════════════════════════════
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(512), nullable=False)
+    full_name = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
+    team_memberships = relationship("TeamMember", foreign_keys="TeamMember.user_id", back_populates="user", cascade="all, delete-orphan")
+
+
+class Team(Base):
+    __tablename__ = "teams"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    slug = Column(String(255), unique=True, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    max_projects = Column(Integer, default=10)
+    max_crawl_urls = Column(Integer, default=10000)
+    owner = relationship("User", foreign_keys=[Column(Integer)])
+    members = relationship("TeamMember", back_populates="team", cascade="all, delete-orphan")
+    team_projects = relationship("TeamProject", back_populates="team", cascade="all, delete-orphan")
+
+
+class TeamMember(Base):
+    __tablename__ = "team_members"
+    id = Column(Integer, primary_key=True, index=True)
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    role = Column(String(20), default="viewer")  # owner/admin/editor/viewer
+    invited_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    team = relationship("Team", back_populates="members")
+    user = relationship("User", foreign_keys=[user_id], back_populates="team_memberships")
+
+
+class TeamProject(Base):
+    __tablename__ = "team_projects"
+    id = Column(Integer, primary_key=True, index=True)
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    team = relationship("Team", back_populates="team_projects")
+    project = relationship("Project")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v0.8.0 Feature 4: Google Search Console + Rank Tracking
+# ═══════════════════════════════════════════════════════════════════════
+
+class GSCConnection(Base):
+    __tablename__ = "gsc_connections"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    site_url = Column(String(2048), nullable=False)
+    access_token = Column(Text, nullable=True)
+    refresh_token = Column(Text, nullable=True)
+    token_expiry = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    user = relationship("User")
+    project = relationship("Project")
+
+
+class KeywordRanking(Base):
+    __tablename__ = "keyword_rankings"
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    keyword = Column(String(512), nullable=False)
+    date = Column(Date, nullable=False)
+    position = Column(Float, nullable=True)
+    clicks = Column(Integer, default=0)
+    impressions = Column(Integer, default=0)
+    ctr = Column(Float, nullable=True)
+    url = Column(String(2048), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    project = relationship("Project")

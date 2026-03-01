@@ -33,6 +33,8 @@ export default function ProjectSettingsPage() {
   const [excludePatterns, setExcludePatterns] = useState("");
   const [crawlExternalLinks, setCrawlExternalLinks] = useState(false);
   const [crawlSchedule, setCrawlSchedule] = useState(""); // v0.5.0
+  const [useJsRendering, setUseJsRendering] = useState(false);    // v0.8.0
+  const [jsWaitTime, setJsWaitTime] = useState(2.0);              // v0.8.0
 
   const load = useCallback(async () => {
     try {
@@ -47,6 +49,8 @@ export default function ProjectSettingsPage() {
       setExcludePatterns((proj.exclude_patterns ?? []).join("\n"));
       setCrawlExternalLinks(proj.crawl_external_links ?? false);
       setCrawlSchedule(proj.crawl_schedule ?? "");
+      setUseJsRendering(proj.use_js_rendering ?? false);  // v0.8.0
+      setJsWaitTime(proj.js_wait_time ?? 2.0);            // v0.8.0
       try {
         const ac = await api.getAlertConfig(projectId);
         setAlertConfig(ac);
@@ -88,6 +92,8 @@ export default function ProjectSettingsPage() {
         exclude_patterns: excludePats.length > 0 ? excludePats : null,
         crawl_external_links: crawlExternalLinks,
         crawl_schedule: crawlSchedule || null,
+        use_js_rendering: useJsRendering,   // v0.8.0
+        js_wait_time: jsWaitTime,           // v0.8.0
       };
       const updated = await api.updateProject(projectId, update);
       setProject(updated);
@@ -225,6 +231,57 @@ export default function ProjectSettingsPage() {
               {crawlSchedule === "daily" ? "every 24 hours" :
                crawlSchedule === "weekly" ? "every 7 days" : "every 30 days"}.
               The first scheduled crawl will trigger immediately if no previous crawl exists.
+            </div>
+          )}
+        </div>
+
+        {/* JavaScript Rendering — v0.8.0 */}
+        <div className="bg-white rounded-xl border border-purple-100 p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">JS</span>
+            <h2 className="text-base font-semibold text-gray-900">JavaScript Rendering (Playwright)</h2>
+            <span className="ml-auto text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">v0.8.0</span>
+          </div>
+          <p className="text-sm text-gray-500">
+            Use a headless Chromium browser to render pages before crawling. Recommended for SPAs, React, Vue, and Angular sites.
+            Crawl speed will be significantly slower.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setUseJsRendering(!useJsRendering)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                useJsRendering ? "bg-purple-600" : "bg-gray-200"
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                useJsRendering ? "translate-x-6" : "translate-x-1"
+              }`} />
+            </button>
+            <span className="text-sm font-medium text-gray-700">
+              {useJsRendering ? "JavaScript Rendering enabled" : "JavaScript Rendering disabled (default)"}
+            </span>
+          </div>
+          {useJsRendering && (
+            <div className="space-y-3">
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm text-purple-700">
+                Playwright will wait for the page to reach network idle state before extracting content.
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  JS Wait Time: <span className="font-bold text-purple-700">{jsWaitTime.toFixed(1)}s</span>
+                  <span className="text-gray-400 font-normal ml-1">(extra wait after page load)</span>
+                </label>
+                <input
+                  type="range" min={0} max={5} step={0.5}
+                  value={jsWaitTime}
+                  onChange={e => setJsWaitTime(parseFloat(e.target.value))}
+                  className="w-full accent-purple-600"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>0s (fastest)</span><span>2.5s</span><span>5s (most reliable)</span>
+                </div>
+              </div>
             </div>
           )}
         </div>

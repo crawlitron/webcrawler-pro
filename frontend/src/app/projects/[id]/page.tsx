@@ -190,6 +190,18 @@ export default function ProjectPage() {
             className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 hover:text-gray-900 transition-colors">
             Vergleich
           </Link>
+          <Link href={`/projects/${id}/cwv`}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition">
+            CWV
+          </Link>
+          <Link href={`/projects/${id}/rankings`}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition">
+            Rankings
+          </Link>
+          <Link href={`/projects/${id}/gsc`}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition">
+            GSC
+          </Link>
         </div>
         <a href={project?.start_url} target="_blank" rel="noopener noreferrer"
             className="text-sm text-blue-500 hover:underline mt-1 inline-block">
