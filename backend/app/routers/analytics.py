@@ -331,3 +331,392 @@ def issues_summary(crawl_id: int, db: Session = Depends(get_db)) -> Dict[str, An
         "warning_issues": crawl.warning_issues,
         "info_issues": crawl.info_issues,
     }
+
+
+# ---------------------------------------------------------------------------
+# v0.5.0: Accessibility Analytics (WCAG 2.1 / BFSG)
+# ---------------------------------------------------------------------------
+
+ACCESSIBILITY_CATEGORIES = {
+    # issue_type prefix -> WCAG category
+    "a11y_missing_alt": "Perceivable",
+    "a11y_empty_alt": "Perceivable",
+    "a11y_missing_captions": "Perceivable",
+    "a11y_missing_lang": "Perceivable",
+    "a11y_invalid_lang": "Perceivable",
+    "a11y_viewport_no_scale": "Perceivable",
+    "a11y_viewport_limited_scale": "Perceivable",
+    "a11y_vague_link": "Operable",
+    "a11y_empty_link": "Operable",
+    "a11y_icon_link": "Operable",
+    "a11y_missing_skip": "Operable",
+    "a11y_positive_tabindex": "Operable",
+    "a11y_input_missing": "Understandable",
+    "a11y_button_missing": "Understandable",
+    "a11y_select_missing": "Understandable",
+    "a11y_duplicate_ids": "Robust",
+    "a11y_missing_title": "Robust",
+    "bfsg_missing": "BFSG",
+}
+
+
+def _get_wcag_category(issue_type: str) -> str:
+    for prefix, cat in ACCESSIBILITY_CATEGORIES.items():
+        if issue_type.startswith(prefix):
+            return cat
+    return "Other"
+
+
+@router.get("/projects/{project_id}/analytics/accessibility")
+def accessibility_analytics(
+    project_id: int,
+    crawl_id: int = None,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """v0.5.0: WCAG 2.1 / BFSG accessibility analytics for a project.
+
+    Returns WCAG score (0-100), issues by category, top affected URLs.
+    Uses the most recent completed crawl unless crawl_id is specified.
+    """
+    from ..models import Project, CrawlStatus
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    # Resolve crawl
+    if crawl_id:
+        crawl = db.query(Crawl).filter(
+            Crawl.id == crawl_id, Crawl.project_id == project_id
+        ).first()
+        if not crawl:
+            raise HTTPException(404, "Crawl not found for this project")
+    else:
+        crawl = (
+            db.query(Crawl)
+            .filter(
+                Crawl.project_id == project_id,
+                Crawl.status == CrawlStatus.COMPLETED,
+            )
+            .order_by(Crawl.completed_at.desc())
+            .first()
+        )
+        if not crawl:
+            return {
+                "project_id": project_id,
+                "crawl_id": None,
+                "wcag_score": None,
+                "total_pages": 0,
+                "accessibility_issues": 0,
+                "issues_by_category": {},
+                "issues_by_severity": {"critical": 0, "warning": 0, "info": 0},
+                "top_affected_urls": [],
+                "bfsg_checklist": _bfsg_checklist({}),
+                "message": "No completed crawl found for this project",
+            }
+
+    cid = crawl.id
+    total_pages = db.query(Page).filter(Page.crawl_id == cid).count()
+
+    # All accessibility issues for this crawl
+    a11y_issues = (
+        db.query(Issue)
+        .filter(Issue.crawl_id == cid, Issue.category == "accessibility")
+        .all()
+    )
+
+    # Count by severity
+    n_critical = sum(1 for i in a11y_issues if i.severity.value == "critical")
+    n_warning = sum(1 for i in a11y_issues if i.severity.value == "warning")
+    n_info = sum(1 for i in a11y_issues if i.severity.value == "info")
+    total_a11y = len(a11y_issues)
+
+    # -----------------------------------------------------------------------
+    # WCAG Score (0–100)
+    # Deduct points based on issue density (issues per page), capped at 100
+    # critical: -4 pts each (max -60), warning: -2 pts each (max -30), info: -0.5 (max -10)
+    # -----------------------------------------------------------------------
+    if total_pages == 0:
+        wcag_score = 100
+    else:
+        deduction = (
+            min(n_critical * 4, 60)
+            + min(n_warning * 2, 30)
+            + min(n_info * 0.5, 10)
+        )
+        wcag_score = max(0, round(100 - deduction))
+
+    # Issues grouped by WCAG category
+    category_counts: Dict[str, Dict] = {}
+    WCAG_CATS = ["Perceivable", "Operable", "Understandable", "Robust", "BFSG", "Other"]
+    for cat in WCAG_CATS:
+        category_counts[cat] = {"critical": 0, "warning": 0, "info": 0, "total": 0}
+
+    for issue in a11y_issues:
+        cat = _get_wcag_category(issue.issue_type)
+        sev = issue.severity.value
+        category_counts[cat][sev] = category_counts[cat].get(sev, 0) + 1
+        category_counts[cat]["total"] += 1
+
+    # Per-category score (0-100): start 100, deduct by density
+    for cat, counts in category_counts.items():
+        if total_pages == 0:
+            counts["score"] = 100
+        else:
+            cat_deduction = (
+                min(counts["critical"] * 5, 70)
+                + min(counts["warning"] * 2, 25)
+                + min(counts["info"] * 0.5, 5)
+            )
+            counts["score"] = max(0, round(100 - cat_deduction))
+
+    # Issues grouped by issue_type (for detailed breakdown)
+    type_counts: Dict[str, Dict] = {}
+    for issue in a11y_issues:
+        key = issue.issue_type
+        if key not in type_counts:
+            type_counts[key] = {
+                "issue_type": key,
+                "description": issue.description,
+                "recommendation": issue.recommendation or "",
+                "category": _get_wcag_category(key),
+                "critical": 0,
+                "warning": 0,
+                "info": 0,
+                "total": 0,
+            }
+        sev = issue.severity.value
+        type_counts[key][sev] += 1
+        type_counts[key]["total"] += 1
+
+    issues_by_type = sorted(
+        type_counts.values(), key=lambda x: (x["critical"] * 3 + x["warning"] * 2 + x["info"]), reverse=True
+    )
+
+    # Top affected URLs (pages with most accessibility issues)
+    page_issue_counts = {}
+    for issue in a11y_issues:
+        pid = issue.page_id
+        if pid not in page_issue_counts:
+            page_issue_counts[pid] = {"critical": 0, "warning": 0, "info": 0, "total": 0}
+        sev = issue.severity.value
+        page_issue_counts[pid][sev] = page_issue_counts[pid].get(sev, 0) + 1
+        page_issue_counts[pid]["total"] += 1
+
+    top_page_ids = sorted(page_issue_counts, key=lambda x: page_issue_counts[x]["total"], reverse=True)[:10]
+    top_affected_urls = []
+    for pid in top_page_ids:
+        page = db.query(Page).filter(Page.id == pid).first()
+        if page:
+            top_affected_urls.append({
+                "page_id": pid,
+                "url": page.url,
+                "title": page.title,
+                "status_code": page.status_code,
+                "critical": page_issue_counts[pid]["critical"],
+                "warning": page_issue_counts[pid]["warning"],
+                "info": page_issue_counts[pid]["info"],
+                "total": page_issue_counts[pid]["total"],
+            })
+
+    # BFSG compliance checklist - derived from issue presence
+    issue_types_present = {i.issue_type for i in a11y_issues}
+    bfsg = _bfsg_checklist(issue_types_present)
+
+    return {
+        "project_id": project_id,
+        "crawl_id": cid,
+        "crawl_completed_at": crawl.completed_at.isoformat() if crawl.completed_at else None,
+        "wcag_score": wcag_score,
+        "total_pages": total_pages,
+        "accessibility_issues": total_a11y,
+        "issues_by_severity": {
+            "critical": n_critical,
+            "warning": n_warning,
+            "info": n_info,
+        },
+        "issues_by_category": category_counts,
+        "issues_by_type": issues_by_type,
+        "top_affected_urls": top_affected_urls,
+        "bfsg_checklist": bfsg,
+        "score_label": _wcag_score_label(wcag_score),
+    }
+
+
+def _wcag_score_label(score: int) -> str:
+    if score >= 80:
+        return "good"
+    if score >= 50:
+        return "needs_improvement"
+    return "poor"
+
+
+def _bfsg_checklist(issue_types_present: set) -> List[Dict[str, Any]]:
+    """Return BFSG compliance checklist items with pass/fail status."""
+    checks = [
+        {
+            "id": "wcag_lang",
+            "title": "Sprache ausgezeichnet (WCAG 3.1.1)",
+            "description": "Das <html>-Tag hat ein gueltiges lang-Attribut",
+            "passed": "a11y_missing_lang" not in issue_types_present
+                      and "a11y_invalid_lang" not in issue_types_present,
+            "wcag": "3.1.1",
+            "level": "A",
+        },
+        {
+            "id": "wcag_alt_text",
+            "title": "Alternativtexte fuer Bilder (WCAG 1.1.1)",
+            "description": "Alle Nicht-dekorations-Bilder haben Alt-Text",
+            "passed": "a11y_missing_alt_text" not in issue_types_present,
+            "wcag": "1.1.1",
+            "level": "A",
+        },
+        {
+            "id": "wcag_title",
+            "title": "Seitentitel vorhanden (WCAG 2.4.2)",
+            "description": "Jede Seite hat einen beschreibenden <title>-Tag",
+            "passed": "a11y_missing_title" not in issue_types_present,
+            "wcag": "2.4.2",
+            "level": "A",
+        },
+        {
+            "id": "wcag_form_labels",
+            "title": "Formularbeschriftungen (WCAG 1.3.1)",
+            "description": "Alle Formularfelder haben zugeordnete Labels",
+            "passed": "a11y_input_missing_label" not in issue_types_present,
+            "wcag": "1.3.1 / 3.3.2",
+            "level": "A",
+        },
+        {
+            "id": "wcag_buttons",
+            "title": "Schaltflaechen beschriftet (WCAG 4.1.2)",
+            "description": "Alle Schaltflaechen haben erkennbaren Text oder aria-label",
+            "passed": "a11y_button_missing_label" not in issue_types_present,
+            "wcag": "4.1.2",
+            "level": "A",
+        },
+        {
+            "id": "wcag_links",
+            "title": "Aussagekraeftige Linktexte (WCAG 2.4.4)",
+            "description": "Keine leeren oder vagen Link-Texte wie 'hier klicken'",
+            "passed": "a11y_empty_link" not in issue_types_present
+                      and "a11y_vague_link_text" not in issue_types_present,
+            "wcag": "2.4.4",
+            "level": "AA",
+        },
+        {
+            "id": "wcag_zoom",
+            "title": "Zoom nicht gesperrt (WCAG 1.4.4)",
+            "description": "Viewport erlaubt Zoom (kein user-scalable=no)",
+            "passed": "a11y_viewport_no_scale" not in issue_types_present,
+            "wcag": "1.4.4",
+            "level": "AA",
+        },
+        {
+            "id": "wcag_skip_nav",
+            "title": "Skip-Navigation vorhanden (WCAG 2.4.1)",
+            "description": "Seiten haben einen 'Zum Hauptinhalt springen' Link",
+            "passed": "a11y_missing_skip_nav" not in issue_types_present,
+            "wcag": "2.4.1",
+            "level": "A",
+        },
+        {
+            "id": "bfsg_contact",
+            "title": "Kontaktinformationen (BFSG)",
+            "description": "Kontaktmoeglichkeit (tel:/mailto:) ist vorhanden",
+            "passed": "bfsg_missing_contact" not in issue_types_present,
+            "wcag": "BFSG",
+            "level": "BFSG",
+        },
+        {
+            "id": "bfsg_impressum",
+            "title": "Impressum-Link (TMG/BFSG)",
+            "description": "Sichtbarer Link zum Impressum ist vorhanden",
+            "passed": "bfsg_missing_impressum" not in issue_types_present,
+            "wcag": "BFSG / TMG",
+            "level": "BFSG",
+        },
+        {
+            "id": "bfsg_a11y_statement",
+            "title": "Barrierefreiheitserklaerung (BFSG §12)",
+            "description": "Link zur Barrierefreiheitserklaerung vorhanden (Pflicht ab 28.06.2025)",
+            "passed": "bfsg_missing_a11y_statement" not in issue_types_present,
+            "wcag": "BFSG §12",
+            "level": "BFSG",
+        },
+    ]
+    total = len(checks)
+    passed = sum(1 for c in checks if c["passed"])
+    return {
+        "checks": checks,
+        "passed": passed,
+        "total": total,
+        "compliance_pct": round(passed / total * 100) if total > 0 else 0,
+    }
+
+
+# ---------------------------------------------------------------------------
+# v0.5.0: Performance Analytics
+# ---------------------------------------------------------------------------
+
+@router.get("/crawls/{crawl_id}/analytics/performance")
+def performance_analytics(
+    crawl_id: int,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """v0.5.0: Performance scoring distribution and statistics."""
+    _get_crawl_or_404(crawl_id, db)
+
+    pages_200 = db.query(Page).filter(
+        Page.crawl_id == crawl_id,
+        Page.status_code == 200,
+        Page.performance_score.isnot(None),
+    ).all()
+
+    if not pages_200:
+        return {
+            "crawl_id": crawl_id,
+            "total_scored": 0,
+            "avg_score": None,
+            "distribution": {"good": 0, "ok": 0, "poor": 0},
+            "slow_pages": [],
+        }
+
+    scores = [p.performance_score for p in pages_200]
+    avg_score = round(sum(scores) / len(scores))
+
+    good = sum(1 for s in scores if s >= 80)
+    ok = sum(1 for s in scores if 50 <= s < 80)
+    poor = sum(1 for s in scores if s < 50)
+
+    slow_pages = sorted(
+        [p for p in pages_200 if p.performance_score < 50],
+        key=lambda p: p.performance_score
+    )[:10]
+
+    return {
+        "crawl_id": crawl_id,
+        "total_scored": len(scores),
+        "avg_score": avg_score,
+        "score_label": _wcag_score_label(avg_score),
+        "distribution": {
+            "good": good,
+            "ok": ok,
+            "poor": poor,
+        },
+        "distribution_pct": {
+            "good": round(good / len(scores) * 100, 1) if scores else 0,
+            "ok": round(ok / len(scores) * 100, 1) if scores else 0,
+            "poor": round(poor / len(scores) * 100, 1) if scores else 0,
+        },
+        "slow_pages": [
+            {
+                "page_id": p.id,
+                "url": p.url,
+                "title": p.title,
+                "performance_score": p.performance_score,
+                "response_time_ms": round(p.response_time * 1000, 1) if p.response_time else None,
+            }
+            for p in slow_pages
+        ],
+    }

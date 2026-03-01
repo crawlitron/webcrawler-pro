@@ -23,6 +23,12 @@ def run_migrations():
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS crawl_external_links BOOLEAN DEFAULT FALSE",
         # v0.4.0: extra_data JSON column for pages (stores images, redirect chains, etc.)
         "ALTER TABLE pages ADD COLUMN IF NOT EXISTS extra_data JSON",
+        # v0.5.0: scheduled crawls
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS crawl_schedule VARCHAR(20)",
+        # v0.5.0: performance scoring
+        "ALTER TABLE pages ADD COLUMN IF NOT EXISTS performance_score INTEGER",
+        # v0.5.0: issue categorization (seo | accessibility | performance)
+        "ALTER TABLE issues ADD COLUMN IF NOT EXISTS category VARCHAR(50)",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -32,7 +38,7 @@ def run_migrations():
             except Exception as e:
                 logger.warning("Migration skipped (%s): %s", sql[:60], e)
                 conn.rollback()
-    logger.info("Database migrations applied (v0.4.0)")
+    logger.info("Database migrations applied (v0.5.0)")
 
 
 def create_tables(retries=10, delay=3):
@@ -57,7 +63,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="WebCrawler Pro API",
     description="SEO Crawler API — Screaming Frog alternative",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
 
@@ -84,11 +90,11 @@ def health():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        return {"status": "healthy", "db": "connected", "version": "0.4.0"}
+        return {"status": "healthy", "db": "connected", "version": "0.5.0"}
     except Exception as e:
         return {"status": "unhealthy", "db": str(e)}
 
 
 @app.get("/")
 def root():
-    return {"name": "WebCrawler Pro", "version": "0.4.0", "docs": "/docs"}
+    return {"name": "WebCrawler Pro", "version": "0.5.0", "docs": "/docs"}

@@ -82,6 +82,58 @@ def _run_spider(
     q.put(results)
 
 
+def _calculate_performance_score(pd: dict) -> int:
+    """v0.5.0: Score 0-100 based on response time, status code, redirects, content."""
+    score = 0
+    status = pd.get("status_code") or 0
+    rt = pd.get("response_time") or 0.0
+    extra = pd.get("extra_data") or {}
+    redirect_hops = extra.get("redirect_hops", 0) or 0
+    word_count = pd.get("word_count", 0) or 0
+
+    # Component 1: Response time (0-40 pts)
+    if rt <= 0.2:
+        score += 40
+    elif rt <= 0.5:
+        score += 30
+    elif rt <= 1.0:
+        score += 20
+    elif rt <= 3.0:
+        score += 10
+    else:
+        score += 0
+
+    # Component 2: HTTP status (0-20 pts)
+    if status == 200:
+        score += 20
+    elif 300 <= status < 400:
+        score += 10
+    else:
+        score += 0
+
+    # Component 3: No redirect chain (0-20 pts)
+    if redirect_hops == 0:
+        score += 20
+    elif redirect_hops == 1:
+        score += 12
+    elif redirect_hops == 2:
+        score += 5
+    else:
+        score += 0
+
+    # Component 4: Content quality (0-20 pts)
+    if word_count >= 300:
+        score += 20
+    elif word_count >= 100:
+        score += 15
+    elif word_count >= 50:
+        score += 8
+    else:
+        score += 0
+
+    return min(100, max(0, score))
+
+
 @celery_app.task(bind=True, name="tasks.run_crawl", max_retries=1)
 def run_crawl(
     self,
@@ -147,12 +199,23 @@ def run_crawl(
                 else:
                     n_crawled += 1
 
-                # Build extra_data - merge spider extra_data with redirect chain
+                # Build extra_data
                 spider_extra = pd.get("extra_data") or {}
                 redirect_chain = pd.get("redirect_chain", [])
                 spider_extra["redirect_chain"] = redirect_chain
-                spider_extra["redirect_hops"] = pd.get("redirect_hops", len(redirect_chain) - 1 if len(redirect_chain) > 1 else 0)
+                spider_extra["redirect_hops"] = pd.get(
+                    "redirect_hops",
+                    len(redirect_chain) - 1 if len(redirect_chain) > 1 else 0
+                )
                 spider_extra["h1_count"] = pd.get("h1_count", 0)
+
+                # v0.5.0: Keyword analysis — store in extra_data
+                kw_data = analyzer.analyze_keywords(pd)
+                if kw_data.get("top_keywords"):
+                    spider_extra["keywords"] = kw_data
+
+                # v0.5.0: Performance score
+                perf_score = _calculate_performance_score(pd)
 
                 page = Page(
                     crawl_id=crawl_id,
@@ -173,11 +236,14 @@ def run_crawl(
                     redirect_url=pd.get("redirect_url"),
                     depth=pd.get("depth", 0),
                     extra_data=spider_extra,
+                    performance_score=perf_score,
                 )
                 db.add(page)
                 db.flush()
 
+                # SEO issues (category=seo)
                 for issue in analyzer.analyze(pd):
+                    cat = getattr(issue, "category", "seo") or "seo"
                     db.add(Issue(
                         crawl_id=crawl_id,
                         page_id=page.id,
@@ -185,6 +251,25 @@ def run_crawl(
                         issue_type=issue.issue_type,
                         description=issue.description,
                         recommendation=issue.recommendation,
+                        category=cat,
+                    ))
+                    if issue.severity == "critical":
+                        n_critical += 1
+                    elif issue.severity == "warning":
+                        n_warning += 1
+                    else:
+                        n_info += 1
+
+                # v0.5.0: Accessibility issues (category=accessibility)
+                for issue in analyzer.analyze_accessibility(pd):
+                    db.add(Issue(
+                        crawl_id=crawl_id,
+                        page_id=page.id,
+                        severity=IssueSeverity(issue.severity),
+                        issue_type=issue.issue_type,
+                        description=issue.description,
+                        recommendation=issue.recommendation,
+                        category="accessibility",
                     ))
                     if issue.severity == "critical":
                         n_critical += 1
@@ -211,7 +296,6 @@ def run_crawl(
             dup_count = analyzer.analyze_duplicates(crawl_id, db)
             if dup_count > 0:
                 logger.info("Crawl %d: found %d duplicate content issues", crawl_id, dup_count)
-                # Re-count all warning issues (duplicates are warnings)
                 from app.models import IssueSeverity as IS
                 from sqlalchemy import func
                 counts = db.query(

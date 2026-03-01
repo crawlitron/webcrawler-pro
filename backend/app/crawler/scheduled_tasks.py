@@ -1,4 +1,3 @@
-
 from datetime import datetime, timedelta
 import logging
 from celery import shared_task
@@ -26,11 +25,11 @@ def cleanup_old_crawls(self, days: int = 90):
         for crawl in old_crawls:
             db.delete(crawl)
         db.commit()
-        logger.info(f"cleanup_old_crawls: deleted {count} crawl(s) older than {days} days")
+        logger.info("cleanup_old_crawls: deleted %d crawl(s) older than %d days", count, days)
         return {"deleted": count, "cutoff": cutoff.isoformat()}
     except Exception as exc:
         db.rollback()
-        logger.error(f"cleanup_old_crawls failed: {exc}")
+        logger.error("cleanup_old_crawls failed: %s", exc)
         raise self.retry(exc=exc, countdown=60)
     finally:
         db.close()
@@ -44,7 +43,6 @@ def daily_health_check(self):
     from sqlalchemy import text
     db: Session = SessionLocal()
     try:
-        # Test DB connection
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
 
@@ -66,10 +64,185 @@ def daily_health_check(self):
             "running_crawls": running_crawls,
             "failed_crawls_last_24h": failed_crawls_today,
         }
-        logger.info(f"daily_health_check: {report}")
+        logger.info("daily_health_check: %s", report)
         return report
     except Exception as exc:
-        logger.error(f"daily_health_check failed: {exc}")
+        logger.error("daily_health_check failed: %s", exc)
         raise self.retry(exc=exc, countdown=30)
+    finally:
+        db.close()
+
+
+@shared_task(name="crawler.run_scheduled_crawls", bind=True, max_retries=1)
+def run_scheduled_crawls(self):
+    """v0.5.0: Periodic task — check all projects with crawl_schedule and trigger crawls when due.
+
+    Schedule thresholds:
+      daily   — crawl if last completed crawl was more than 23 hours ago
+      weekly  — crawl if last completed crawl was more than 6 days 23 hours ago
+      monthly — crawl if last completed crawl was more than 29 days ago
+    """
+    from app.database import SessionLocal
+    from app.models import Project, Crawl, CrawlStatus
+    from app.crawler.tasks import run_crawl
+    import json
+
+    db: Session = SessionLocal()
+    triggered = []
+    skipped = []
+
+    SCHEDULE_THRESHOLDS = {
+        "daily": timedelta(hours=23),
+        "weekly": timedelta(days=6, hours=23),
+        "monthly": timedelta(days=29),
+    }
+
+    try:
+        projects = db.query(Project).filter(
+            Project.crawl_schedule.isnot(None),
+            Project.crawl_schedule != "",
+        ).all()
+
+        logger.info("run_scheduled_crawls: checking %d scheduled project(s)", len(projects))
+
+        for project in projects:
+            schedule = (project.crawl_schedule or "").strip().lower()
+            if schedule not in SCHEDULE_THRESHOLDS:
+                logger.warning(
+                    "Project %d has unknown crawl_schedule value: %s — skipping",
+                    project.id, schedule
+                )
+                continue
+
+            threshold = SCHEDULE_THRESHOLDS[schedule]
+
+            # Find most recent completed crawl
+            last_crawl = (
+                db.query(Crawl)
+                .filter(
+                    Crawl.project_id == project.id,
+                    Crawl.status == CrawlStatus.COMPLETED,
+                )
+                .order_by(Crawl.completed_at.desc())
+                .first()
+            )
+
+            # Also check for any currently running crawl to avoid duplicates
+            running_crawl = (
+                db.query(Crawl)
+                .filter(
+                    Crawl.project_id == project.id,
+                    Crawl.status == CrawlStatus.RUNNING,
+                )
+                .first()
+            )
+
+            if running_crawl:
+                logger.info(
+                    "Project %d (%s): crawl already running (crawl_id=%d) — skipping",
+                    project.id, project.name, running_crawl.id
+                )
+                skipped.append({"project_id": project.id, "reason": "already_running"})
+                continue
+
+            now = datetime.utcnow()
+            crawl_due = False
+
+            if last_crawl is None:
+                # Never crawled — trigger immediately
+                crawl_due = True
+                logger.info(
+                    "Project %d (%s): no previous crawl found — triggering first scheduled crawl",
+                    project.id, project.name
+                )
+            else:
+                last_ts = last_crawl.completed_at or last_crawl.created_at
+                age = now - last_ts
+                if age >= threshold:
+                    crawl_due = True
+                    logger.info(
+                        "Project %d (%s): last crawl %s ago (threshold %s) — triggering",
+                        project.id, project.name,
+                        str(age).split(".")[0], str(threshold)
+                    )
+                else:
+                    logger.info(
+                        "Project %d (%s): last crawl %s ago — not yet due (threshold %s)",
+                        project.id, project.name,
+                        str(age).split(".")[0], str(threshold)
+                    )
+                    skipped.append({
+                        "project_id": project.id,
+                        "reason": "not_due_yet",
+                        "last_crawl_age_hours": round(age.total_seconds() / 3600, 1),
+                    })
+
+            if not crawl_due:
+                continue
+
+            # Create a new Crawl record
+            new_crawl = Crawl(
+                project_id=project.id,
+                status=CrawlStatus.PENDING,
+                total_urls=0,
+                crawled_urls=0,
+                failed_urls=0,
+                critical_issues=0,
+                warning_issues=0,
+                info_issues=0,
+            )
+            db.add(new_crawl)
+            db.commit()
+            db.refresh(new_crawl)
+
+            # Resolve include/exclude patterns
+            include_patterns = []
+            exclude_patterns = []
+            if project.include_patterns:
+                try:
+                    inc = project.include_patterns
+                    include_patterns = json.loads(inc) if isinstance(inc, str) else (inc or [])
+                except (ValueError, TypeError):
+                    include_patterns = []
+            if project.exclude_patterns:
+                try:
+                    exc = project.exclude_patterns
+                    exclude_patterns = json.loads(exc) if isinstance(exc, str) else (exc or [])
+                except (ValueError, TypeError):
+                    exclude_patterns = []
+
+            # Dispatch Celery task
+            run_crawl.delay(
+                crawl_id=new_crawl.id,
+                start_url=project.start_url,
+                max_urls=project.max_urls or 500,
+                custom_user_agent=project.custom_user_agent,
+                crawl_delay=project.crawl_delay or 0.5,
+                include_patterns=include_patterns,
+                exclude_patterns=exclude_patterns,
+                crawl_external_links=project.crawl_external_links or False,
+            )
+
+            logger.info(
+                "Scheduled crawl triggered: project_id=%d crawl_id=%d schedule=%s",
+                project.id, new_crawl.id, schedule
+            )
+            triggered.append({
+                "project_id": project.id,
+                "crawl_id": new_crawl.id,
+                "schedule": schedule,
+            })
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "triggered": triggered,
+            "skipped": skipped,
+            "total_checked": len(projects),
+        }
+
+    except Exception as exc:
+        logger.error("run_scheduled_crawls failed: %s", exc)
+        db.rollback()
+        raise self.retry(exc=exc, countdown=120)
     finally:
         db.close()

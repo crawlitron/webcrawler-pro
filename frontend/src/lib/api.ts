@@ -23,6 +23,7 @@ export interface Project {
   include_patterns?: string[] | null;
   exclude_patterns?: string[] | null;
   crawl_external_links: boolean;
+  crawl_schedule?: string | null;
   created_at: string;
   updated_at: string;
   last_crawl_status?: string;
@@ -38,6 +39,7 @@ export interface ProjectCreate {
   include_patterns?: string[] | null;
   exclude_patterns?: string[] | null;
   crawl_external_links?: boolean;
+  crawl_schedule?: string | null;
 }
 
 export interface ProjectUpdate {
@@ -49,6 +51,7 @@ export interface ProjectUpdate {
   include_patterns?: string[] | null;
   exclude_patterns?: string[] | null;
   crawl_external_links?: boolean;
+  crawl_schedule?: string | null;
 }
 
 export interface Crawl {
@@ -91,6 +94,7 @@ export interface Page {
   crawled_at: string;
   issue_count: number;
   extra_data?: Record<string, unknown>;
+  performance_score?: number | null;
 }
 
 export interface PageListResponse {
@@ -110,6 +114,7 @@ export interface Issue {
   issue_type: string;
   description: string;
   recommendation?: string;
+  category?: string;
 }
 
 export interface IssueListResponse {
@@ -206,6 +211,88 @@ export interface LinksResponse {
   total_pages: number;
 }
 
+// v0.5.0: Accessibility Analytics
+export interface BFSGCheckItem {
+  id: string;
+  title: string;
+  description: string;
+  passed: boolean;
+  wcag: string;
+  level: string;
+}
+
+export interface BFSGChecklist {
+  checks: BFSGCheckItem[];
+  passed: number;
+  total: number;
+  compliance_pct: number;
+}
+
+export interface A11yCategoryData {
+  critical: number;
+  warning: number;
+  info: number;
+  total: number;
+  score: number;
+}
+
+export interface A11yIssueType {
+  issue_type: string;
+  description: string;
+  recommendation: string;
+  category: string;
+  critical: number;
+  warning: number;
+  info: number;
+  total: number;
+}
+
+export interface A11yAffectedUrl {
+  page_id: number;
+  url: string;
+  title?: string;
+  status_code?: number;
+  critical: number;
+  warning: number;
+  info: number;
+  total: number;
+}
+
+export interface AccessibilityAnalytics {
+  project_id: number;
+  crawl_id: number | null;
+  crawl_completed_at?: string;
+  wcag_score: number | null;
+  score_label: "good" | "needs_improvement" | "poor";
+  total_pages: number;
+  accessibility_issues: number;
+  issues_by_severity: { critical: number; warning: number; info: number };
+  issues_by_category: Record<string, A11yCategoryData>;
+  issues_by_type: A11yIssueType[];
+  top_affected_urls: A11yAffectedUrl[];
+  bfsg_checklist: BFSGChecklist;
+  message?: string;
+}
+
+// v0.5.0: Performance Analytics
+export interface PerformanceSlowPage {
+  page_id: number;
+  url: string;
+  title?: string;
+  performance_score: number;
+  response_time_ms?: number;
+}
+
+export interface PerformanceAnalytics {
+  crawl_id: number;
+  total_scored: number;
+  avg_score: number | null;
+  score_label?: string;
+  distribution: { good: number; ok: number; poor: number };
+  distribution_pct: { good: number; ok: number; poor: number };
+  slow_pages: PerformanceSlowPage[];
+}
+
 export const api = {
   // ---- Projects ----
   getProjects: () => request<Project[]>("/api/projects"),
@@ -289,6 +376,13 @@ export const api = {
     request<IssueTrendPoint[]>(`/api/projects/${projectId}/analytics/issue-trend?limit=${limit}`),
   getIssuesSummary: (crawlId: number) =>
     request<IssuesSummary>(`/api/crawls/${crawlId}/analytics/issues-summary`),
+  // v0.5.0
+  getAccessibilityAnalytics: (projectId: number, crawlId?: number) => {
+    const q = crawlId ? `?crawl_id=${crawlId}` : "";
+    return request<AccessibilityAnalytics>(`/api/projects/${projectId}/analytics/accessibility${q}`);
+  },
+  getPerformanceAnalytics: (crawlId: number) =>
+    request<PerformanceAnalytics>(`/api/crawls/${crawlId}/analytics/performance`),
 
   // ---- Links ----
   getCrawlLinks: (

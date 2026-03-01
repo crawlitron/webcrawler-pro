@@ -44,7 +44,7 @@ class SEOSpider(scrapy.Spider):
         self.crawl_external_links = crawl_external_links
 
         ua = custom_user_agent or "WebCrawlerPro/2.0 (+https://webcrawlerpro.io/bot)"
-        self.custom_settings = dict(self.custom_settings)  # copy class-level dict
+        self.custom_settings = dict(self.custom_settings)
         self.custom_settings["USER_AGENT"] = ua
         self.custom_settings["DOWNLOAD_DELAY"] = crawl_delay
 
@@ -65,7 +65,6 @@ class SEOSpider(scrapy.Spider):
         )
 
     def _url_allowed(self, url: str) -> bool:
-        """Check include/exclude patterns against URL."""
         if self.exclude_patterns:
             for pat in self.exclude_patterns:
                 if pat.search(url):
@@ -126,33 +125,21 @@ class SEOSpider(scrapy.Spider):
             yield data
 
     def _extract_redirect_chain(self, response) -> list:
-        """Build redirect chain from response.history."""
         chain = []
         for r in response.history:
-            chain.append({
-                "url": r.url,
-                "status_code": r.status,
-            })
-        # Add final URL if there was a redirect
+            chain.append({"url": r.url, "status_code": r.status})
         if response.history:
-            chain.append({
-                "url": response.url,
-                "status_code": response.status,
-            })
+            chain.append({"url": response.url, "status_code": response.status})
         return chain
 
     def _extract_images(self, response, base_url: str) -> list:
-        """Extract detailed image data from page."""
         images = []
         for img in response.css("img"):
             src = img.attrib.get("src", "").strip()
             if not src:
                 src = img.attrib.get("data-src", "").strip()
-            if src:
-                abs_src = urljoin(base_url, src)
-            else:
-                abs_src = ""
-            alt = img.attrib.get("alt", None)  # None = attribute missing, "" = empty
+            abs_src = urljoin(base_url, src) if src else ""
+            alt = img.attrib.get("alt", None)
             width = img.attrib.get("width", None)
             height = img.attrib.get("height", None)
             images.append({
@@ -167,6 +154,168 @@ class SEOSpider(scrapy.Spider):
             })
         return images
 
+    def _extract_accessibility(self, response, url: str, images_data: list) -> dict:
+        """Extract accessibility-relevant data using Scrapy CSS selectors (v0.5.0)."""
+        a11y = {}
+
+        # --- lang attribute on <html> ---
+        html_lang = response.css("html::attr(lang)").get() or ""
+        a11y["html_lang"] = html_lang.strip()
+        a11y["html_lang_missing"] = html_lang.strip() == ""
+        a11y["html_lang_short"] = 0 < len(html_lang.strip()) < 2
+
+        # --- viewport meta ---
+        viewport_content = response.css("meta[name=\"viewport\"]::attr(content)").get() or ""
+        if not viewport_content:
+            viewport_content = response.css("meta[name='viewport']::attr(content)").get() or ""
+        a11y["viewport_content"] = viewport_content
+        a11y["viewport_no_scale"] = "user-scalable=no" in viewport_content.lower()
+        max_scale_match = re.search(r"maximum-scale=([\d.]+)", viewport_content)
+        a11y["viewport_max_scale"] = float(max_scale_match.group(1)) if max_scale_match else None
+
+        # --- Images without alt (already in images_data) ---
+        a11y["images_missing_alt"] = [img["src"] for img in images_data if img["alt"] is None][:50]
+        a11y["images_empty_alt_non_decorative"] = [
+            img["src"] for img in images_data
+            if img.get("alt_empty") and img.get("role") != "presentation"
+        ][:50]
+
+        # --- Video/Audio without captions ---
+        media_missing_captions = []
+        for media in response.css("video, audio"):
+            tag = "video" if "video" in media.root.tag else "audio"
+            tracks = media.css("track[kind=captions], track[kind=subtitles]")
+            if not tracks:
+                src_attr = media.attrib.get("src", "") or media.css("source::attr(src)").get() or ""
+                media_missing_captions.append({"tag": tag, "src": src_attr[:100]})
+        a11y["media_missing_captions"] = media_missing_captions[:20]
+
+        # --- Links analysis ---
+        vague_texts = {"hier klicken", "hier", "mehr", "weiter", "read more",
+                       "click here", "more", "next", "link", "klick hier",
+                       "details", "jetzt", "here"}
+        empty_links = []
+        vague_links = []
+        icon_links_no_aria = []
+        skip_nav_found = False
+
+        for a in response.css("a"):
+            href = a.attrib.get("href", "").strip()
+            text = " ".join(a.css("::text").getall()).strip()
+            aria_label = a.attrib.get("aria-label", "").strip()
+            aria_hidden = a.attrib.get("aria-hidden", "")
+
+            # Skip nav check
+            if href.startswith("#") and ("skip" in text.lower() or
+               "zum inhalt" in text.lower() or
+               "zum hauptinhalt" in text.lower() or
+               "skip" in href.lower()):
+                skip_nav_found = True
+
+            if not text and not aria_label:
+                # Check for icon-only
+                icon_classes = " ".join(a.css("[class]::attr(class)").getall())
+                if any(x in icon_classes for x in ["icon", "fa-", "bi-", "glyphicon", "material-icons"]):
+                    icon_links_no_aria.append(href[:100])
+                elif href and not href.startswith("javascript"):
+                    empty_links.append(href[:100])
+            elif text.lower() in vague_texts:
+                vague_links.append({"text": text, "href": href[:100]})
+
+        a11y["empty_links"] = empty_links[:30]
+        a11y["vague_links"] = vague_links[:30]
+        a11y["icon_links_no_aria"] = icon_links_no_aria[:30]
+        a11y["skip_nav_found"] = skip_nav_found
+
+        # --- tabindex > 0 ---
+        positive_tabindex = []
+        for el in response.css("[tabindex]"):
+            try:
+                val = int(el.attrib.get("tabindex", 0))
+                if val > 0:
+                    positive_tabindex.append({"tag": el.root.tag, "tabindex": val})
+            except (ValueError, TypeError):
+                pass
+        a11y["positive_tabindex"] = positive_tabindex[:20]
+
+        # --- Form inputs without labels ---
+        # Collect all label for= values
+        label_for_ids = set(response.css("label::attr(for)").getall())
+        inputs_missing_label = []
+        skip_types = {"hidden", "submit", "button", "image", "reset"}
+        for inp in response.css("input"):
+            itype = inp.attrib.get("type", "text").lower()
+            if itype in skip_types:
+                continue
+            iid = inp.attrib.get("id", "")
+            aria_label = inp.attrib.get("aria-label", "")
+            aria_labelledby = inp.attrib.get("aria-labelledby", "")
+            title = inp.attrib.get("title", "")
+            has_label = (iid and iid in label_for_ids) or aria_label or aria_labelledby or title
+            if not has_label:
+                inputs_missing_label.append({
+                    "type": itype,
+                    "name": inp.attrib.get("name", ""),
+                })
+        a11y["inputs_missing_label"] = inputs_missing_label[:30]
+
+        # --- Buttons without accessible text ---
+        buttons_missing_label = []
+        for btn in response.css("button"):
+            text = " ".join(btn.css("::text").getall()).strip()
+            aria_label = btn.attrib.get("aria-label", "")
+            aria_labelledby = btn.attrib.get("aria-labelledby", "")
+            title = btn.attrib.get("title", "")
+            if not text and not aria_label and not aria_labelledby and not title:
+                buttons_missing_label.append(btn.attrib.get("type", "button"))
+        a11y["buttons_missing_label"] = buttons_missing_label[:30]
+
+        # --- Select without label ---
+        select_missing_label = []
+        for sel in response.css("select"):
+            sel_id = sel.attrib.get("id", "")
+            aria_label = sel.attrib.get("aria-label", "")
+            aria_labelledby = sel.attrib.get("aria-labelledby", "")
+            has_label = (sel_id and sel_id in label_for_ids) or aria_label or aria_labelledby
+            if not has_label:
+                select_missing_label.append(sel.attrib.get("name", ""))
+        a11y["select_missing_label"] = select_missing_label[:20]
+
+        # --- Duplicate IDs ---
+        all_ids = response.css("[id]::attr(id)").getall()
+        seen = set()
+        dup_ids = set()
+        for id_val in all_ids:
+            if id_val in seen:
+                dup_ids.add(id_val)
+            seen.add(id_val)
+        a11y["duplicate_ids"] = list(dup_ids)[:30]
+
+        # --- BFSG checks ---
+        all_hrefs = response.css("a::attr(href)").getall()
+        all_link_texts = [" ".join(a.css("::text").getall()).strip().lower()
+                          for a in response.css("a")]
+        has_contact = any("tel:" in h or "mailto:" in h for h in all_hrefs)
+        a11y["has_contact_link"] = has_contact
+
+        has_impressum = any(
+            "impressum" in h.lower() or "imprint" in h.lower() for h in all_hrefs
+        ) or any(
+            "impressum" in t or "imprint" in t for t in all_link_texts
+        )
+        a11y["has_impressum_link"] = has_impressum
+
+        has_a11y_statement = any(
+            "barriere" in h.lower() or "accessibility" in h.lower()
+            or "barrierefreiheit" in h.lower() for h in all_hrefs
+        ) or any(
+            "barriere" in t or "accessibility" in t
+            or "barrierefreiheit" in t for t in all_link_texts
+        )
+        a11y["has_accessibility_statement"] = has_a11y_statement
+
+        return a11y
+
     def _extract(self, response) -> dict:
         url = response.url
         status = response.status
@@ -176,7 +325,6 @@ class SEOSpider(scrapy.Spider):
         depth = response.meta.get("depth", 0)
         rt = response.meta.get("download_latency", 0.0)
 
-        # Redirect chain
         redirect_chain = self._extract_redirect_chain(response)
         redirect_url = None
         if response.history:
@@ -235,7 +383,7 @@ class SEOSpider(scrapy.Spider):
             extra_data["twitter_title"] = twitter_title.strip() if twitter_title else None
             extra_data["twitter_description"] = twitter_desc.strip() if twitter_desc else None
 
-            # --- JSON-LD / Schema.org structured data ---
+            # --- JSON-LD / Schema.org ---
             jsonld_scripts = response.css('script[type="application/ld+json"]::text').getall()
             has_jsonld = len(jsonld_scripts) > 0
             jsonld_types = []
@@ -259,7 +407,7 @@ class SEOSpider(scrapy.Spider):
             extra_data["has_schema_org"] = has_schema_org
             extra_data["jsonld_types"] = jsonld_types
 
-            # --- Links (internal + external with nofollow detection) ---
+            # --- Links ---
             base_netloc = urlparse(url).netloc
             internal_link_list = []
             external_link_list = []
@@ -277,11 +425,7 @@ class SEOSpider(scrapy.Spider):
                 if is_nofollow:
                     nofollow_count += 1
                 anchor_text = " ".join(a.css("::text").getall()).strip()[:200]
-                link_info = {
-                    "url": abs_url,
-                    "text": anchor_text,
-                    "nofollow": is_nofollow,
-                }
+                link_info = {"url": abs_url, "text": anchor_text, "nofollow": is_nofollow}
                 if p.netloc == base_netloc:
                     internal_links += 1
                     if len(internal_link_list) < 200:
@@ -294,23 +438,24 @@ class SEOSpider(scrapy.Spider):
             extra_data["external_links"] = external_link_list
             extra_data["nofollow_links_count"] = nofollow_count
 
-            # --- Images (detailed extraction for SEO analysis) ---
+            # --- Images ---
             images_data = self._extract_images(response, url)
             images_without_alt = sum(1 for img in images_data if not img["has_alt"])
             extra_data["total_images"] = len(images_data)
-            extra_data["images"] = images_data[:200]  # cap at 200 stored
+            extra_data["images"] = images_data[:200]
 
-            # --- Word count + body text for keyword density ---
+            # --- Word count + body text ---
             body_text = " ".join(response.css("body *::text").getall())
             word_count = len(re.findall(r"\b\w+\b", body_text))
             extra_data["body_text"] = body_text[:5000] if body_text else ""
 
             # --- URL depth ---
             url_path = urlparse(url).path
-            url_depth = url_path.rstrip("/").count("/")
-            extra_data["url_depth"] = url_depth
+            extra_data["url_depth"] = url_path.rstrip("/").count("/")
 
-        # Store redirect chain in extra_data
+            # --- v0.5.0: Accessibility data extraction ---
+            extra_data["a11y"] = self._extract_accessibility(response, url, images_data)
+
         extra_data["redirect_chain"] = redirect_chain
         extra_data["redirect_hops"] = len(redirect_chain) - 1 if len(redirect_chain) > 1 else 0
 

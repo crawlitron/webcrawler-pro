@@ -13,6 +13,7 @@ class ProjectCreate(BaseModel):
     include_patterns: Optional[List[str]] = None
     exclude_patterns: Optional[List[str]] = None
     crawl_external_links: bool = False
+    crawl_schedule: Optional[str] = None  # v0.5.0: null | daily | weekly | monthly
 
 
 class ProjectUpdate(BaseModel):
@@ -24,6 +25,7 @@ class ProjectUpdate(BaseModel):
     include_patterns: Optional[List[str]] = None
     exclude_patterns: Optional[List[str]] = None
     crawl_external_links: Optional[bool] = None
+    crawl_schedule: Optional[str] = None  # v0.5.0
 
 
 class ProjectResponse(BaseModel):
@@ -36,6 +38,7 @@ class ProjectResponse(BaseModel):
     include_patterns: Optional[List[str]] = None
     exclude_patterns: Optional[List[str]] = None
     crawl_external_links: bool = False
+    crawl_schedule: Optional[str] = None  # v0.5.0
     created_at: datetime
     updated_at: datetime
     last_crawl_status: Optional[str] = None
@@ -84,6 +87,7 @@ class PageResponse(BaseModel):
     crawled_at: datetime
     issue_count: int = 0
     extra_data: Optional[dict] = None
+    performance_score: Optional[int] = None  # v0.5.0
     model_config = {"from_attributes": True}
 
 
@@ -104,6 +108,7 @@ class IssueResponse(BaseModel):
     issue_type: str
     description: str
     recommendation: Optional[str] = None
+    category: Optional[str] = None  # v0.5.0
     model_config = {"from_attributes": True}
 
 

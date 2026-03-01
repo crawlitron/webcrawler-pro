@@ -30,6 +30,8 @@ class Project(Base):
     include_patterns = Column(Text, nullable=True)   # JSON array of regex strings
     exclude_patterns = Column(Text, nullable=True)   # JSON array of regex strings
     crawl_external_links = Column(Boolean, default=False)
+    # v0.5.0
+    crawl_schedule = Column(String(20), nullable=True)  # null | daily | weekly | monthly
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     crawls = relationship("Crawl", back_populates="project", cascade="all, delete-orphan")
@@ -78,6 +80,8 @@ class Page(Base):
     depth = Column(Integer, default=0)
     crawled_at = Column(DateTime, default=datetime.utcnow)
     extra_data = Column(JSON, nullable=True)
+    # v0.5.0
+    performance_score = Column(Integer, nullable=True)  # 0-100
     crawl = relationship("Crawl", back_populates="pages")
     issues = relationship("Issue", back_populates="page", cascade="all, delete-orphan")
 
@@ -91,5 +95,7 @@ class Issue(Base):
     issue_type = Column(String(100), nullable=False)
     description = Column(Text, nullable=False)
     recommendation = Column(Text, nullable=True)
+    # v0.5.0
+    category = Column(String(50), nullable=True)  # seo | accessibility | performance | etc.
     crawl = relationship("Crawl", back_populates="issues")
     page = relationship("Page", back_populates="issues")

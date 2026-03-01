@@ -56,6 +56,7 @@ const SORT_OPTIONS = [
   { value: "status_code", label: "Status" },
   { value: "response_time", label: "Response Time" },
   { value: "word_count", label: "Word Count" },
+  { value: "performance_score", label: "Perf Score" },
   { value: "internal_links_count", label: "Internal Links" },
   { value: "images_without_alt", label: "Images no Alt" },
 ];
@@ -327,7 +328,7 @@ export default function UrlExplorerPage() {
 
   const exportSelected = () => {
     const selectedPages = pages.filter(p => selected.has(p.id));
-    const headers = ["URL", "Status", "Response Time", "Title", "H1", "Word Count", "Internal Links", "Indexable", "Issues"];
+    const headers = ["URL", "Status", "Response Time", "Title", "H1", "Word Count", "Internal Links", "Indexable", "Perf Score", "Issues"];
     const rows = selectedPages.map(p => [
       p.url,
       p.status_code ?? "",
@@ -337,6 +338,7 @@ export default function UrlExplorerPage() {
       p.word_count,
       p.internal_links_count,
       p.is_indexable ? "Yes" : "No",
+      p.performance_score != null ? p.performance_score : "",
       p.issue_count,
     ]);
     const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -471,6 +473,11 @@ export default function UrlExplorerPage() {
                       Words <SortIcon col="word_count" />
                     </button>
                   </th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-700 hidden lg:table-cell">
+                    <button onClick={() => toggleSort("performance_score")} className="flex items-center hover:text-blue-600">
+                      Perf <SortIcon col="performance_score" />
+                    </button>
+                  </th>
                   <th className="px-3 py-3 text-right font-semibold text-gray-700">Issues</th>
                 </tr>
               </thead>
@@ -505,6 +512,15 @@ export default function UrlExplorerPage() {
                         : <span className="text-xs text-red-600 font-medium">noindex</span>}
                     </td>
                     <td className="px-3 py-2.5 text-xs text-gray-600">{p.word_count || "—"}</td>
+                    <td className="px-3 py-2.5 hidden lg:table-cell">
+                      {p.performance_score != null ? (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          p.performance_score >= 80 ? 'bg-green-100 text-green-700'
+                          : p.performance_score >= 50 ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-red-100 text-red-700'
+                        }`}>{p.performance_score}</span>
+                      ) : <span className="text-gray-300 text-xs">—</span>}
+                    </td>
                     <td className="px-3 py-2.5 text-right">
                       {p.issue_count > 0 ? (
                         <span className="inline-block text-xs font-bold px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">{p.issue_count}</span>
