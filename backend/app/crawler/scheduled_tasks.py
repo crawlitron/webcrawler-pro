@@ -258,7 +258,7 @@ def sync_ga4_data(self, project_id: int):
     from app.database import SessionLocal
     from app.integrations.google_analytics import GA4Integration
     import asyncio
-    
+
     db: Session = SessionLocal()
     try:
         ga4 = GA4Integration(db)
@@ -278,15 +278,15 @@ def sync_all_ga4_projects(self):
     """Sync all projects with GA4 connections."""
     from app.database import SessionLocal
     from app.models import GA4Token
-    
+
     db: Session = SessionLocal()
     try:
         tokens = db.query(GA4Token).all()
         count = len(tokens)
-        
+
         for token in tokens:
             sync_ga4_data.delay(token.project_id)
-        
+
         logger.info("Triggered GA4 sync for %s projects", count)
         return {
             "timestamp": datetime.utcnow().isoformat(),

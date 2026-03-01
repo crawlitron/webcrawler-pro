@@ -130,7 +130,7 @@ async def test_alert(project_id: int, db: Session = Depends(get_db)):
 
     alert = db.query(AlertConfig).filter(
         AlertConfig.project_id == project_id,
-        AlertConfig.enabled == True,
+        AlertConfig.enabled,
     ).first()
     if not alert:
         raise HTTPException(status_code=404, detail="No enabled alert config found")

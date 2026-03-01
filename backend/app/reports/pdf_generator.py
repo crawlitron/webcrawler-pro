@@ -1,22 +1,12 @@
 import io
 import logging
 from datetime import datetime
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 def _safe_import_reportlab():
     try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import cm
-        from reportlab.lib import colors
-        from reportlab.platypus import (
-            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-            HRFlowable, PageBreak,
-        )
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
         return True
     except ImportError:
         return False
@@ -40,7 +30,7 @@ def generate_crawl_pdf(crawl, pages, issues, project) -> bytes:
         SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
         HRFlowable, PageBreak,
     )
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib.enums import TA_CENTER
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -297,6 +287,7 @@ def generate_crawl_pdf(crawl, pages, issues, project) -> bytes:
     story.append(hr())
 
     a11y_issues = [i for i in issues if i.category == "accessibility"]
+
     def _sev(i):
         return i.severity.value if hasattr(i.severity, 'value') else str(i.severity)
     a11y_critical = sum(1 for i in a11y_issues if _sev(i) == "critical")
@@ -440,7 +431,7 @@ def generate_crawl_pdf(crawl, pages, issues, project) -> bytes:
 
 def generate_html_report(crawl, pages, issues, project) -> str:
     """Generate a simple HTML report for preview."""
-    total_issues = (crawl.critical_issues or 0) + (crawl.warning_issues or 0) + (crawl.info_issues or 0)
+    (crawl.critical_issues or 0) + (crawl.warning_issues or 0) + (crawl.info_issues or 0)
     resp_times = [p.response_time for p in pages if p.response_time is not None]
     avg_resp = (sum(resp_times) / len(resp_times) * 1000) if resp_times else 0
     perf_scores = [p.performance_score for p in pages if p.performance_score is not None]

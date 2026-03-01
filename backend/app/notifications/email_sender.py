@@ -3,7 +3,6 @@ import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +13,7 @@ def _build_html_email(project_name: str, crawl_stats: dict, new_issues: list, da
     critical = crawl_stats.get("critical_issues", 0)
     warning = crawl_stats.get("warning_issues", 0)
     info = crawl_stats.get("info_issues", 0)
-    crawl_id = crawl_stats.get("crawl_id", "")
+    crawl_stats.get("crawl_id", "")
     completed = crawl_stats.get("completed_at", datetime.utcnow().strftime("%d.%m.%Y %H:%M"))
 
     issues_rows = ""

@@ -1,12 +1,10 @@
 import re
 import logging
 from typing import Optional
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..database import SessionLocal
 from ..models import Team, TeamMember, TeamProject, Project, User
 from .auth import get_db, require_user
 

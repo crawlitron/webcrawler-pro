@@ -1,13 +1,11 @@
 import os
 import logging
 from datetime import datetime
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..database import SessionLocal
 from ..models import GSCConnection, KeywordRanking, Project, User
 from .auth import get_db, require_user
 
@@ -217,11 +215,11 @@ async def ga4_auth_url(
     """Get GA4 OAuth2 authorization URL."""
     if not GOOGLE_CLIENT_ID:
         raise HTTPException(503, "Google OAuth not configured — set GOOGLE_CLIENT_ID in .env")
-    
+
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(404, "Project not found")
-    
+
     try:
         from ..integrations.google_analytics import GA4Integration
         ga4 = GA4Integration(db)
@@ -249,12 +247,12 @@ async def ga4_callback(
     """Handle GA4 OAuth2 callback."""
     if not GOOGLE_CLIENT_ID:
         raise HTTPException(503, "Google OAuth not configured")
-    
+
     try:
         project_id = int(state) if state.isdigit() else None
         if not project_id:
             raise HTTPException(400, "Invalid state parameter")
-        
+
         from ..integrations.google_analytics import GA4Integration
         ga4 = GA4Integration(db)
         result = await ga4.handle_callback(
@@ -281,13 +279,13 @@ async def ga4_disconnect(
 ):
     """Disconnect GA4 integration."""
     from ..models import GA4Token, GA4Metric
-    
+
     token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
     if token:
         db.query(GA4Metric).filter(GA4Metric.project_id == project_id).delete()
         db.delete(token)
         db.commit()
-    
+
     return {"message": "GA4 disconnected"}
 
 
@@ -299,7 +297,7 @@ async def ga4_status(
 ):
     """Get GA4 connection status."""
     from ..models import GA4Token
-    
+
     token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
     return {
         "connected": token is not None,
@@ -317,11 +315,11 @@ async def ga4_overview(
 ):
     """Get GA4 KPI overview."""
     from ..models import GA4Token
-    
+
     token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
     if not token:
         raise HTTPException(404, "GA4 not connected to this project")
-    
+
     try:
         from ..integrations.google_analytics import GA4Integration
         ga4 = GA4Integration(db)
@@ -345,11 +343,11 @@ async def ga4_top_pages(
 ):
     """Get top pages by sessions."""
     from ..models import GA4Token
-    
+
     token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
     if not token:
         raise HTTPException(404, "GA4 not connected to this project")
-    
+
     try:
         from ..integrations.google_analytics import GA4Integration
         ga4 = GA4Integration(db)
@@ -373,11 +371,11 @@ async def ga4_traffic_sources(
 ):
     """Get traffic sources breakdown."""
     from ..models import GA4Token
-    
+
     token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
     if not token:
         raise HTTPException(404, "GA4 not connected to this project")
-    
+
     try:
         from ..integrations.google_analytics import GA4Integration
         ga4 = GA4Integration(db)
@@ -400,11 +398,11 @@ async def ga4_device_breakdown(
 ):
     """Get device category breakdown."""
     from ..models import GA4Token
-    
+
     token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
     if not token:
         raise HTTPException(404, "GA4 not connected to this project")
-    
+
     try:
         from ..integrations.google_analytics import GA4Integration
         ga4 = GA4Integration(db)
@@ -427,11 +425,11 @@ async def ga4_conversion_events(
 ):
     """Get conversion events."""
     from ..models import GA4Token
-    
+
     token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
     if not token:
         raise HTTPException(404, "GA4 not connected to this project")
-    
+
     try:
         from ..integrations.google_analytics import GA4Integration
         ga4 = GA4Integration(db)
@@ -453,11 +451,11 @@ async def ga4_manual_sync(
 ):
     """Trigger manual GA4 data sync."""
     from ..models import GA4Token
-    
+
     token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
     if not token:
         raise HTTPException(404, "GA4 not connected to this project")
-    
+
     try:
         from ..crawler.scheduled_tasks import sync_ga4_data
         sync_ga4_data.delay(project_id)

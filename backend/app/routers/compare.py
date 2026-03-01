@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from ..database import get_db
-from ..models import Crawl, Page, Issue, CrawlStatus, IssueSeverity
+from ..models import Crawl, Page, Issue
 
 router = APIRouter(tags=["compare"])
 

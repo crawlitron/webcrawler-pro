@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from cryptography.fernet import Fernet
 from datetime import datetime
 from typing import Dict
@@ -53,7 +53,7 @@ def get_db():
 def get_setup_status():
     db = SessionLocal()
     try:
-        admin_exists = db.query(User).filter(User.is_admin == True).first() is not None
+        admin_exists = db.query(User).filter(User.is_admin).first() is not None
         settings = db.query(AppSettings).all()
         steps_done = []
         if admin_exists:
@@ -74,7 +74,7 @@ def complete_setup(request: SetupCompleteRequest):
     db = SessionLocal()
     try:
         # Guard: only run once
-        if db.query(User).filter(User.is_admin == True).first():
+        if db.query(User).filter(User.is_admin).first():
             raise HTTPException(400, "Setup already completed")
 
         # Import here to avoid circular deps

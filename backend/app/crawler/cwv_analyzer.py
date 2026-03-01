@@ -109,13 +109,13 @@ async def measure_cwv(url: str, timeout: int = 30) -> dict:
             await browser.close()
 
             metrics = {
-                "lcp":            raw.get("lcp"),
-                "cls":            raw.get("cls"),
-                "fcp":            raw.get("fcp"),
-                "ttfb":           raw.get("ttfb"),
-                "tbt":            max(raw.get("tbt", 0), 0),
-                "tti":            raw.get("tti"),
-                "dom_size":       raw.get("dom_size"),
+                "lcp": raw.get("lcp"),
+                "cls": raw.get("cls"),
+                "fcp": raw.get("fcp"),
+                "ttfb": raw.get("ttfb"),
+                "tbt": max(raw.get("tbt", 0), 0),
+                "tti": raw.get("tti"),
+                "dom_size": raw.get("dom_size"),
                 "resource_count": resource_count,
                 "resource_size_kb": round(resource_size / 1024, 1),
             }

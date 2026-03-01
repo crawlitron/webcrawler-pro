@@ -8,20 +8,20 @@ from urllib.parse import urlparse
 # ISO 639-1 valid language codes (subset for validation)
 # ---------------------------------------------------------------------------
 VALID_LANG_CODES = {
-    "ab","aa","af","ak","sq","am","ar","an","hy","as","av","ae","ay","az",
-    "bm","ba","eu","be","bn","bh","bi","bs","br","bg","my","ca","ch","ce",
-    "ny","zh","cv","kw","co","cr","hr","cs","da","dv","nl","dz","en","eo",
-    "et","ee","fo","fj","fi","fr","ff","gl","ka","de","el","gn","gu","ht",
-    "ha","he","hz","hi","ho","hu","ia","id","ie","ga","ig","ik","io","is",
-    "it","iu","ja","jv","kl","kn","kr","ks","kk","km","ki","rw","ky","kv",
-    "kg","ko","ku","kj","la","lb","lg","li","ln","lo","lt","lu","lv","gv",
-    "mk","mg","ms","ml","mt","mi","mr","mh","mn","na","nv","nd","ne","ng",
-    "nb","nn","no","ii","nr","oc","oj","cu","om","or","os","pa","pi","fa",
-    "pl","ps","pt","qu","rm","rn","ro","ru","sa","sc","sd","se","sm","sg",
-    "sr","gd","sn","si","sk","sl","so","st","es","su","sw","ss","sv","ta",
-    "te","tg","th","ti","bo","tk","tl","tn","to","tr","ts","tt","tw","ty",
-    "ug","uk","ur","uz","ve","vi","vo","wa","cy","wo","fy","xh","yi","yo",
-    "za","zu",
+    "ab", "aa", "af", "ak", "sq", "am", "ar", "an", "hy", "as", "av", "ae", "ay", "az",
+    "bm", "ba", "eu", "be", "bn", "bh", "bi", "bs", "br", "bg", "my", "ca", "ch", "ce",
+    "ny", "zh", "cv", "kw", "co", "cr", "hr", "cs", "da", "dv", "nl", "dz", "en", "eo",
+    "et", "ee", "fo", "fj", "fi", "fr", "ff", "gl", "ka", "de", "el", "gn", "gu", "ht",
+    "ha", "he", "hz", "hi", "ho", "hu", "ia", "id", "ie", "ga", "ig", "ik", "io", "is",
+    "it", "iu", "ja", "jv", "kl", "kn", "kr", "ks", "kk", "km", "ki", "rw", "ky", "kv",
+    "kg", "ko", "ku", "kj", "la", "lb", "lg", "li", "ln", "lo", "lt", "lu", "lv", "gv",
+    "mk", "mg", "ms", "ml", "mt", "mi", "mr", "mh", "mn", "na", "nv", "nd", "ne", "ng",
+    "nb", "nn", "no", "ii", "nr", "oc", "oj", "cu", "om", "or", "os", "pa", "pi", "fa",
+    "pl", "ps", "pt", "qu", "rm", "rn", "ro", "ru", "sa", "sc", "sd", "se", "sm", "sg",
+    "sr", "gd", "sn", "si", "sk", "sl", "so", "st", "es", "su", "sw", "ss", "sv", "ta",
+    "te", "tg", "th", "ti", "bo", "tk", "tl", "tn", "to", "tr", "ts", "tt", "tw", "ty",
+    "ug", "uk", "ur", "uz", "ve", "vi", "vo", "wa", "cy", "wo", "fy", "xh", "yi", "yo",
+    "za", "zu",
 }
 
 
@@ -68,7 +68,7 @@ def _relative_luminance(r: int, g: int, b: int) -> float:
 def _hex_to_rgb(hex_color: str):
     h = hex_color.strip().lstrip("#")
     if len(h) == 3:
-        h = h[0]*2 + h[1]*2 + h[2]*2
+        h = h[0] * 2 + h[1] * 2 + h[2] * 2
     if len(h) != 6:
         return None
     try:
@@ -119,6 +119,7 @@ def _css_color_to_hex(val: str) -> Optional[str]:
 
 class SEOIssue:
     """Backward-compatible SEO issue object."""
+
     def __init__(
         self,
         severity: str,
@@ -146,23 +147,23 @@ class SEOAnalyzer:
     IMAGE_ALT_MAX_LENGTH = 100
     REDIRECT_CHAIN_MAX_HOPS = 2
     STOPWORDS = {
-        "a","an","the","and","or","but","in","on","at","to","for","of","with",
-        "by","from","is","was","are","were","be","been","being","have","has",
-        "had","do","does","did","will","would","could","should","may","might",
-        "shall","can","not","this","that","these","those","it","its","as","if",
-        "then","than","so","up","out","about","into","through","during","before",
-        "after","above","below","between","each","more","most","other","some",
-        "such","no","nor","only","same","too","very","just","also","we","you",
-        "he","she","they","i","my","your","his","her","our","their","what",
-        "which","who","whom","how","when","where","why","all","any","both",
-        "few","own","over","under",
-        "der","die","das","den","dem","des","ein","eine","einer","einem","eines",
-        "und","oder","aber","nicht","mit","von","zu","bei","auf","aus","als",
-        "auch","ist","sind","war","hat","haben","wird","werden","fuer","an",
-        "im","sich","sie","er","es","wir","ihr","ich","du","nach","seit",
-        "noch","bis","dann","wenn","dass","wie","was","kann","mehr","nur",
-        "schon","alle","hier","jetzt","immer","sehr","neu","gut","ohne",
-        "zwischen","unter","ueber","vor","hinter","neben","durch",
+        "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
+        "by", "from", "is", "was", "are", "were", "be", "been", "being", "have", "has",
+        "had", "do", "does", "did", "will", "would", "could", "should", "may", "might",
+        "shall", "can", "not", "this", "that", "these", "those", "it", "its", "as", "if",
+        "then", "than", "so", "up", "out", "about", "into", "through", "during", "before",
+        "after", "above", "below", "between", "each", "more", "most", "other", "some",
+        "such", "no", "nor", "only", "same", "too", "very", "just", "also", "we", "you",
+        "he", "she", "they", "i", "my", "your", "his", "her", "our", "their", "what",
+        "which", "who", "whom", "how", "when", "where", "why", "all", "any", "both",
+        "few", "own", "over", "under",
+        "der", "die", "das", "den", "dem", "des", "ein", "eine", "einer", "einem", "eines",
+        "und", "oder", "aber", "nicht", "mit", "von", "zu", "bei", "auf", "aus", "als",
+        "auch", "ist", "sind", "war", "hat", "haben", "wird", "werden", "fuer", "an",
+        "im", "sich", "sie", "er", "es", "wir", "ihr", "ich", "du", "nach", "seit",
+        "noch", "bis", "dann", "wenn", "dass", "wie", "was", "kann", "mehr", "nur",
+        "schon", "alle", "hier", "jetzt", "immer", "sehr", "neu", "gut", "ohne",
+        "zwischen", "unter", "ueber", "vor", "hinter", "neben", "durch",
     }
 
     # ------------------------------------------------------------------
@@ -1347,27 +1348,27 @@ class SEOAnalyzer:
             'mobile_score': 0,
             'mobile_issues': [],
         }
-        
+
         if not soup:
             mobile_check['mobile_issues'].append('No HTML content available for analysis')
             return mobile_check
-        
+
         issues: List[str] = []
-        
+
         # 1. Check viewport meta tag
         viewport = soup.find('meta', attrs={'name': 'viewport'})
         if viewport and viewport.get('content'):
             content = viewport.get('content', '').lower()
             mobile_check['viewport_meta'] = 'width=device-width' in content
             mobile_check['viewport_scalable'] = 'user-scalable=no' not in content
-            
+
             if not mobile_check['viewport_meta']:
                 issues.append('Viewport meta tag missing width=device-width')
             if not mobile_check['viewport_scalable']:
                 issues.append('Viewport prevents user scaling (user-scalable=no)')
         else:
             issues.append('Missing viewport meta tag')
-        
+
         # 2. Check font size on body/html
         font_size_ok = False
         for elem in [soup.find('body'), soup.find('html')]:
@@ -1382,30 +1383,30 @@ class SEOAnalyzer:
         mobile_check['font_size_readable'] = font_size_ok
         if not font_size_ok:
             issues.append('Base font size may be too small (< 16px)')
-        
+
         # 3. Count touch targets and check sizes
         touch_elements = soup.find_all(['a', 'button', 'input', 'textarea', 'select'])
         mobile_check['touch_targets_count'] = len(touch_elements)
-        
+
         small_targets = 0
         for elem in touch_elements:
             style = elem.get('style', '')
             width_match = re.search(r'width:\s*(\d+)px', style)
             height_match = re.search(r'height:\s*(\d+)px', style)
-            
+
             if width_match or height_match:
                 width = int(width_match.group(1)) if width_match else 48
                 height = int(height_match.group(1)) if height_match else 48
                 if width < 48 or height < 48:
                     small_targets += 1
-        
+
         mobile_check['small_touch_targets'] = small_targets
         mobile_check['tap_targets_ok'] = small_targets == 0
-        
+
         if small_targets > 0:
             msg = '{} touch targets smaller than 48x48px'.format(small_targets)
             issues.append(msg)
-        
+
         # 4. Check for media queries in style tags
         style_tags = soup.find_all('style')
         media_query_found = False
@@ -1416,24 +1417,24 @@ class SEOAnalyzer:
         mobile_check['media_queries_detected'] = media_query_found
         if not media_query_found:
             issues.append('No @media queries detected in inline styles')
-        
+
         # 5. Check for responsive images
         images = soup.find_all('img')
         responsive_img_count = 0
         for img in images:
             if img.get('srcset') or img.get('sizes'):
                 responsive_img_count += 1
-        
+
         mobile_check['responsive_images'] = responsive_img_count > 0
         if images and responsive_img_count == 0:
             issues.append('No responsive images with srcset/sizes attributes')
-        
+
         # 6. Check for theme-color meta tag
         theme_color = soup.find('meta', attrs={'name': 'theme-color'})
         mobile_check['mobile_meta_theme'] = theme_color is not None
         if not theme_color:
             issues.append('Missing theme-color meta tag for mobile browsers')
-        
+
         # 7. Check for horizontal scroll on body/html
         no_h_scroll = True
         for elem in [soup.find('body'), soup.find('html')]:
@@ -1444,19 +1445,19 @@ class SEOAnalyzer:
         mobile_check['no_horizontal_scroll'] = no_h_scroll
         if not no_h_scroll:
             issues.append('Horizontal scrolling detected on body/html')
-        
+
         # 8. Check for AMP
         html_tag = soup.find('html')
         if html_tag:
             amp = html_tag.has_attr('amp') or html_tag.has_attr('⚡')
             mobile_check['amp_page'] = amp
-        
+
         # 9. Check for structured navigation
         nav = soup.find('nav')
         mobile_check['structured_nav'] = nav is not None
         if not nav:
             issues.append('Missing <nav> element for structured navigation')
-        
+
         # 10. Calculate mobile score (0-100)
         score = 0
         if mobile_check['viewport_meta']:
@@ -1479,8 +1480,8 @@ class SEOAnalyzer:
             score += 5
         if mobile_check['structured_nav']:
             score += 5
-        
+
         mobile_check['mobile_score'] = score
         mobile_check['mobile_issues'] = issues
-        
+
         return mobile_check

@@ -28,8 +28,8 @@ def analytics_overview(crawl_id: int, db: Session = Depends(get_db)) -> Dict[str
     avg_word_count = db.query(func.avg(Page.word_count)).filter(
         Page.crawl_id == crawl_id, Page.word_count > 0
     ).scalar() or 0.0
-    indexable_count = pages_q.filter(Page.is_indexable == True).count()  # noqa: E712
-    noindex_count = pages_q.filter(Page.is_indexable == False).count()   # noqa: E712
+    indexable_count = pages_q.filter(Page.is_indexable is True).count()  # noqa: E712
+    noindex_count = pages_q.filter(Page.is_indexable is False).count()   # noqa: E712
     pages_200 = pages_q.filter(Page.status_code == 200).count()
     pages_3xx = pages_q.filter(Page.status_code >= 300, Page.status_code < 400).count()
     pages_4xx = pages_q.filter(Page.status_code >= 400, Page.status_code < 500).count()
@@ -185,7 +185,7 @@ def generate_sitemap(crawl_id: int, db: Session = Depends(get_db)):
     pages = db.query(Page).filter(
         Page.crawl_id == crawl_id,
         Page.status_code == 200,
-        Page.is_indexable == True,  # noqa: E712
+        Page.is_indexable is True,  # noqa: E712
         Page.content_type.like("%text/html%")
     ).order_by(Page.depth, Page.url).all()
     xml_lines = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"]
@@ -367,18 +367,20 @@ def _get_wcag_category(issue_type: str) -> str:
     return "Other"
 
 
-
-
 def _get_wcag_level(issue_type: str) -> str:
     # Parse WCAG level A/AA/AAA from v0.6.0 issue_type prefix
     it = issue_type.lower()
-    if it.startswith("wcag_aaa_"): return "AAA"
-    if it.startswith("wcag_aa_"):  return "AA"
-    if it.startswith("wcag_a_"):   return "A"
+    if it.startswith("wcag_aaa_"):
+        return "AAA"
+    if it.startswith("wcag_aa_"):
+        return "AA"
+    if it.startswith("wcag_a_"):
+        return "A"
     legacy_aa = {"a11y_viewport_no_scale", "a11y_viewport_limited_scale",
                  "a11y_vague_link", "a11y_empty_link", "a11y_icon_link",
                  "a11y_missing_captions"}
-    if issue_type in legacy_aa: return "AA"
+    if issue_type in legacy_aa:
+        return "AA"
     return "A"
 
 
@@ -389,10 +391,14 @@ def _get_wcag_principle(issue_type: str) -> str:
         code = parts[3] if len(parts) > 3 else ""
         if code and code[0].isdigit():
             p = code[0]
-            if p == "1": return "perceivable"
-            if p == "2": return "operable"
-            if p == "3": return "understandable"
-            if p == "4": return "robust"
+            if p == "1":
+                return "perceivable"
+            if p == "2":
+                return "operable"
+            if p == "3":
+                return "understandable"
+            if p == "4":
+                return "robust"
     legacy = [
         ("a11y_missing_alt", "perceivable"), ("a11y_empty_alt", "perceivable"),
         ("a11y_missing_captions", "perceivable"), ("a11y_missing_lang", "perceivable"),
@@ -406,18 +412,21 @@ def _get_wcag_principle(issue_type: str) -> str:
         ("bfsg_", "perceivable"),
     ]
     for prefix, principle in legacy:
-        if issue_type.startswith(prefix): return principle
+        if issue_type.startswith(prefix):
+            return principle
     return "other"
 
 
 def _calc_level_score(issues: list, total_pages: int) -> int:
     # Calculate 0-100 score for a subset of issues
-    if total_pages == 0: return 100
+    if total_pages == 0:
+        return 100
     n_crit = sum(1 for i in issues if i.severity.value == "critical")
     n_warn = sum(1 for i in issues if i.severity.value == "warning")
     n_info = sum(1 for i in issues if i.severity.value == "info")
     deduction = min(n_crit * 4, 60) + min(n_warn * 2, 30) + min(n_info * 0.5, 10)
     return max(0, round(100 - deduction))
+
 
 @router.get("/projects/{project_id}/analytics/accessibility")
 def accessibility_analytics(
@@ -587,21 +596,21 @@ def accessibility_analytics(
         _prin = _get_wcag_principle(_iss.issue_type)
         issues_by_principle_map[_prin] = issues_by_principle_map.get(_prin, 0) + 1
 
-    score_a   = _calc_level_score(issues_by_level_map["A"],   total_pages)
-    score_aa  = _calc_level_score(issues_by_level_map["AA"],  total_pages)
+    score_a = _calc_level_score(issues_by_level_map["A"], total_pages)
+    score_aa = _calc_level_score(issues_by_level_map["AA"], total_pages)
     score_aaa = _calc_level_score(issues_by_level_map["AAA"], total_pages)
 
     def _level_stats(lvl_issues: list) -> dict:
         return {
-            "count":    len(lvl_issues),
+            "count": len(lvl_issues),
             "critical": sum(1 for i in lvl_issues if i.severity.value == "critical"),
-            "warning":  sum(1 for i in lvl_issues if i.severity.value == "warning"),
-            "info":     sum(1 for i in lvl_issues if i.severity.value == "info"),
+            "warning": sum(1 for i in lvl_issues if i.severity.value == "warning"),
+            "info": sum(1 for i in lvl_issues if i.severity.value == "info"),
         }
 
     issues_by_level = {
-        "A":   {**_level_stats(issues_by_level_map["A"]),   "score": score_a},
-        "AA":  {**_level_stats(issues_by_level_map["AA"]),  "score": score_aa},
+        "A": {**_level_stats(issues_by_level_map["A"]), "score": score_a},
+        "AA": {**_level_stats(issues_by_level_map["AA"]), "score": score_aa},
         "AAA": {**_level_stats(issues_by_level_map["AAA"]), "score": score_aaa},
     }
 
@@ -650,7 +659,6 @@ def accessibility_analytics(
         "bfsg_checklist": bfsg,
         "score_label": _wcag_score_label(wcag_score),
     }
-
 
 
 def _wcag_score_label(score: int) -> str:

@@ -1,16 +1,16 @@
+from ..schemas import CrawlResponse
+from ..models import Project, Crawl, Page, CrawlStatus
+from ..database import get_db
+from sqlalchemy import desc
+from sqlalchemy.orm import Session
+from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException
+from typing import List
+import io
+import csv
 import logging
 logger = logging.getLogger(__name__)
 
-import csv
-import io
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
-from ..database import get_db
-from ..models import Project, Crawl, Page, CrawlStatus
-from ..schemas import CrawlResponse
 
 router = APIRouter(prefix="/api", tags=["crawls"])
 
@@ -183,7 +183,7 @@ def export_sitemap(crawl_id: int, db: Session = Depends(get_db)):
     pages = db.query(Page).filter(
         Page.crawl_id == crawl_id,
         Page.status_code == 200,
-        Page.is_indexable == True,  # noqa: E712
+        Page.is_indexable is True,  # noqa: E712
         Page.content_type.like("%text/html%")
     ).order_by(Page.depth, Page.url).all()
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'

@@ -13,8 +13,6 @@ try:
         DateRange,
         Dimension,
         Metric,
-        FilterExpression,
-        Filter,
     )
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import Flow
@@ -78,15 +76,15 @@ class GA4Integration:
 
     def _parse_date_range(self, date_range: str) -> Tuple[str, str]:
         """Convert date range string to start/end dates.
-        
+
         Args:
             date_range: String like 'last7days', 'last30days', 'last90days'
-            
+
         Returns:
             Tuple of (start_date, end_date) in YYYY-MM-DD format
         """
         end_date = datetime.utcnow()
-        
+
         if date_range == "last7days":
             start_date = end_date - timedelta(days=7)
         elif date_range == "last30days":
@@ -103,13 +101,13 @@ class GA4Integration:
 
     async def get_auth_url(self, project_id: int, redirect_uri: str, client_id: str, client_secret: str) -> str:
         """Generate OAuth2 authorization URL.
-        
+
         Args:
             project_id: Project ID to associate with the token
             redirect_uri: OAuth redirect URI
             client_id: Google OAuth client ID
             client_secret: Google OAuth client secret
-            
+
         Returns:
             Authorization URL string
         """
@@ -121,17 +119,17 @@ class GA4Integration:
         )
         return auth_url
 
-    async def handle_callback(self, code: str, project_id: int, redirect_uri: str, 
+    async def handle_callback(self, code: str, project_id: int, redirect_uri: str,
                             client_id: str, client_secret: str) -> Dict:
         """Exchange authorization code for tokens.
-        
+
         Args:
             code: Authorization code from OAuth callback
             project_id: Project ID to associate tokens with
             redirect_uri: OAuth redirect URI
             client_id: Google OAuth client ID
             client_secret: Google OAuth client secret
-            
+
         Returns:
             Dict with property_id and connection status
         """
@@ -141,13 +139,13 @@ class GA4Integration:
         flow.fetch_token(code=code)
         creds = flow.credentials
 
-        client = self._get_client(creds)
-        
+        self._get_client(creds)
+
         try:
             from google.analytics.admin_v1beta import AnalyticsAdminServiceClient
             admin_client = AnalyticsAdminServiceClient(credentials=creds)
             accounts = admin_client.list_accounts()
-            
+
             property_id = None
             for account in accounts:
                 properties = admin_client.list_properties(parent=account.name)
@@ -156,10 +154,10 @@ class GA4Integration:
                     break
                 if property_id:
                     break
-                    
+
             if not property_id:
                 property_id = "properties/0"
-                
+
         except Exception as e:
             logger.warning("Could not fetch property ID: %s", e)
             property_id = "properties/0"
@@ -190,11 +188,11 @@ class GA4Integration:
 
     async def get_overview(self, property_id: str, date_range: str = "last30days") -> Dict:
         """Get overview KPIs: sessions, pageviews, bounce_rate, avg_duration.
-        
+
         Args:
             property_id: GA4 property ID
             date_range: Date range string (e.g., 'last30days')
-            
+
         Returns:
             Dict with overview metrics
         """
@@ -224,7 +222,7 @@ class GA4Integration:
 
         try:
             response = client.run_report(request)
-            
+
             if response.rows:
                 row = response.rows[0]
                 return {
@@ -250,15 +248,15 @@ class GA4Integration:
             logger.error("GA4 get_overview error: %s", e)
             raise
 
-    async def get_top_pages(self, property_id: str, limit: int = 10, 
+    async def get_top_pages(self, property_id: str, limit: int = 10,
                           date_range: str = "last30days") -> List[Dict]:
         """Get top pages by sessions/pageviews.
-        
+
         Args:
             property_id: GA4 property ID
             limit: Maximum number of pages to return
             date_range: Date range string
-            
+
         Returns:
             List of dicts with page data
         """
@@ -290,7 +288,7 @@ class GA4Integration:
 
         try:
             response = client.run_report(request)
-            
+
             results = []
             for row in response.rows:
                 results.append({
@@ -304,14 +302,14 @@ class GA4Integration:
             logger.error("GA4 get_top_pages error: %s", e)
             raise
 
-    async def get_traffic_sources(self, property_id: str, 
+    async def get_traffic_sources(self, property_id: str,
                                  date_range: str = "last30days") -> Dict:
         """Get traffic breakdown by source/medium.
-        
+
         Args:
             property_id: GA4 property ID
             date_range: Date range string
-            
+
         Returns:
             Dict grouped by source/medium
         """
@@ -341,7 +339,7 @@ class GA4Integration:
 
         try:
             response = client.run_report(request)
-            
+
             sources = {}
             for row in response.rows:
                 source = row.dimension_values[0].value
@@ -356,14 +354,14 @@ class GA4Integration:
             logger.error("GA4 get_traffic_sources error: %s", e)
             raise
 
-    async def get_device_breakdown(self, property_id: str, 
+    async def get_device_breakdown(self, property_id: str,
                                   date_range: str = "last30days") -> Dict:
         """Get sessions by device category.
-        
+
         Args:
             property_id: GA4 property ID
             date_range: Date range string
-            
+
         Returns:
             Dict: {desktop: N, mobile: N, tablet: N}
         """
@@ -387,7 +385,7 @@ class GA4Integration:
 
         try:
             response = client.run_report(request)
-            
+
             devices = {"desktop": 0, "mobile": 0, "tablet": 0}
             for row in response.rows:
                 category = row.dimension_values[0].value.lower()
@@ -399,14 +397,14 @@ class GA4Integration:
             logger.error("GA4 get_device_breakdown error: %s", e)
             raise
 
-    async def get_conversion_events(self, property_id: str, 
+    async def get_conversion_events(self, property_id: str,
                                    date_range: str = "last30days") -> List[Dict]:
         """Get conversion events with counts.
-        
+
         Args:
             property_id: GA4 property ID
             date_range: Date range string
-            
+
         Returns:
             List of events with counts
         """
@@ -430,7 +428,7 @@ class GA4Integration:
 
         try:
             response = client.run_report(request)
-            
+
             events = []
             for row in response.rows:
                 event_name = row.dimension_values[0].value
@@ -447,7 +445,7 @@ class GA4Integration:
 
     async def sync_to_db(self, project_id: int) -> None:
         """Sync GA4 data to database (called by Celery task).
-        
+
         Args:
             project_id: Project ID to sync data for
         """
@@ -461,9 +459,9 @@ class GA4Integration:
 
         try:
             top_pages = await self.get_top_pages(token.property_id, limit=100)
-            
+
             today = date.today()
-            
+
             for page_data in top_pages:
                 metric = GA4Metric(
                     project_id=project_id,
@@ -474,16 +472,16 @@ class GA4Integration:
                     avg_duration=page_data["avg_duration"],
                 )
                 self.db.add(metric)
-            
+
             cutoff_date = today - timedelta(days=90)
             self.db.query(GA4Metric).filter(
                 GA4Metric.project_id == project_id,
                 GA4Metric.date < cutoff_date
             ).delete()
-            
+
             self.db.commit()
             logger.info("GA4 sync completed for project %s", project_id)
-            
+
         except Exception as e:
             logger.error("GA4 sync failed for project %s: %s", project_id, e)
             self.db.rollback()

@@ -72,7 +72,6 @@ class SEOSpider(scrapy.Spider):
             ],
         )
 
-
     def make_request(self, url: str, callback=None, errback=None, meta: dict = None):
         """Build a Scrapy Request, optionally using Playwright for JS rendering."""
         base_meta = dict(meta or {})
@@ -185,7 +184,6 @@ class SEOSpider(scrapy.Spider):
             })
         return images
 
-
     def _extract_accessibility(self, response, url: str, images_data: list) -> dict:
         """Extract accessibility data for WCAG 2.1 + 2.2 Level A/AA/AAA checks."""
         a11y = {}
@@ -198,19 +196,19 @@ class SEOSpider(scrapy.Spider):
         # Invalid if non-empty but not a valid 2-letter (or xx-XX) code
         lang_base = html_lang.split("-")[0].lower() if html_lang else ""
         VALID_LANGS = {
-            "ab","aa","af","ak","sq","am","ar","an","hy","as","av","ae","ay","az",
-            "bm","ba","eu","be","bn","bi","bs","br","bg","my","ca","ch","ce",
-            "ny","zh","cv","kw","co","cr","hr","cs","da","nl","dz","en","eo",
-            "et","ee","fo","fj","fi","fr","ff","gl","ka","de","el","gn","gu",
-            "ha","he","hi","hu","ia","id","ie","ga","ig","io","is","it","ja",
-            "jv","kl","kn","ks","kk","km","ki","rw","ky","kg","ko","ku","la",
-            "lb","lg","li","ln","lo","lt","lu","lv","gv","mk","mg","ms","ml",
-            "mt","mi","mr","mn","na","nv","nd","ne","nb","nn","no","oc","om",
-            "or","pa","fa","pl","ps","pt","qu","rm","rn","ro","ru","sa","sc",
-            "sd","se","sm","sg","sr","gd","sn","si","sk","sl","so","st","es",
-            "su","sw","sv","ta","te","tg","th","ti","bo","tk","tl","tn","to",
-            "tr","ts","tt","tw","ty","ug","uk","ur","uz","ve","vi","vo","wa",
-            "cy","wo","fy","xh","yi","yo","za","zu",
+            "ab", "aa", "af", "ak", "sq", "am", "ar", "an", "hy", "as", "av", "ae", "ay", "az",
+            "bm", "ba", "eu", "be", "bn", "bi", "bs", "br", "bg", "my", "ca", "ch", "ce",
+            "ny", "zh", "cv", "kw", "co", "cr", "hr", "cs", "da", "nl", "dz", "en", "eo",
+            "et", "ee", "fo", "fj", "fi", "fr", "ff", "gl", "ka", "de", "el", "gn", "gu",
+            "ha", "he", "hi", "hu", "ia", "id", "ie", "ga", "ig", "io", "is", "it", "ja",
+            "jv", "kl", "kn", "ks", "kk", "km", "ki", "rw", "ky", "kg", "ko", "ku", "la",
+            "lb", "lg", "li", "ln", "lo", "lt", "lu", "lv", "gv", "mk", "mg", "ms", "ml",
+            "mt", "mi", "mr", "mn", "na", "nv", "nd", "ne", "nb", "nn", "no", "oc", "om",
+            "or", "pa", "fa", "pl", "ps", "pt", "qu", "rm", "rn", "ro", "ru", "sa", "sc",
+            "sd", "se", "sm", "sg", "sr", "gd", "sn", "si", "sk", "sl", "so", "st", "es",
+            "su", "sw", "sv", "ta", "te", "tg", "th", "ti", "bo", "tk", "tl", "tn", "to",
+            "tr", "ts", "tt", "tw", "ty", "ug", "uk", "ur", "uz", "ve", "vi", "vo", "wa",
+            "cy", "wo", "fy", "xh", "yi", "yo", "za", "zu",
         }
         a11y["html_lang_invalid"] = (html_lang != "" and lang_base not in VALID_LANGS)
         a11y["html_lang_short"] = (0 < len(html_lang) < 2)
@@ -456,9 +454,9 @@ class SEOSpider(scrapy.Spider):
 
         # --- Links analysis ---
         vague_texts = {
-            "hier klicken","hier","mehr","weiter","read more","click here",
-            "more","next","link","klick hier","details","jetzt","here",
-            "lesen","weiterleiten","learn more","see more","view more",
+            "hier klicken", "hier", "mehr", "weiter", "read more", "click here",
+            "more", "next", "link", "klick hier", "details", "jetzt", "here",
+            "lesen", "weiterleiten", "learn more", "see more", "view more",
         }
         empty_links = []
         vague_links = []
@@ -481,7 +479,7 @@ class SEOSpider(scrapy.Spider):
 
             if not text and not aria_label:
                 icon_classes = " ".join(a_el.css("[class]::attr(class)").getall())
-                if any(x in icon_classes for x in ["icon","fa-","bi-","glyphicon","material-icons"]):
+                if any(x in icon_classes for x in ["icon", "fa-", "bi-", "glyphicon", "material-icons"]):
                     icon_links_no_aria.append(href[:100])
                 elif href and not href.startswith("javascript"):
                     empty_links.append(href[:100])
@@ -490,11 +488,11 @@ class SEOSpider(scrapy.Spider):
 
             if target == "_blank" and "noopener" not in rel:
                 has_warning_text = any(
-                    w in text.lower() for w in ["neues fenster","new window","new tab","neuer tab","(external)"]
+                    w in text.lower() for w in ["neues fenster", "new window", "new tab", "neuer tab", "(external)"]
                 )
                 has_warning_title = any(
                     w in a_el.attrib.get("title", "").lower()
-                    for w in ["neues fenster","new window","new tab"]
+                    for w in ["neues fenster", "new window", "new tab"]
                 )
                 if not has_warning_text and not has_warning_title:
                     blank_links_no_warn.append("<a href='{}' target='_blank'>{}...</".format(href[:60], text[:30]))
@@ -572,12 +570,12 @@ class SEOSpider(scrapy.Spider):
 
         # --- 2.1.1: onclick on non-focusable elements ---
         onclick_nonfocusable = []
-        focusable_tags = {"a","button","input","select","textarea","details","summary"}
+        focusable_tags = {"a", "button", "input", "select", "textarea", "details", "summary"}
         for el in response.css("[onclick]"):
             tag = el.root.tag
             tabindex = el.attrib.get("tabindex")
             role = el.attrib.get("role", "")
-            if tag not in focusable_tags and tabindex is None and role not in ("button","link","menuitem"):
+            if tag not in focusable_tags and tabindex is None and role not in ("button", "link", "menuitem"):
                 onclick_nonfocusable.append(
                     "<{} onclick='...'>{}</{}>".format(
                         tag, " ".join(el.css("::text").getall()).strip()[:30], tag
@@ -666,34 +664,43 @@ class SEOSpider(scrapy.Spider):
             bg_m = bg_re.search(style)
             if color_m and bg_m:
                 from urllib.parse import urlparse as _up
+
                 def _css_to_hex(val):
                     val = val.strip().lower()
                     named = {
-                        "black":"#000000","white":"#ffffff","red":"#ff0000",
-                        "green":"#008000","blue":"#0000ff","yellow":"#ffff00",
-                        "gray":"#808080","grey":"#808080","silver":"#c0c0c0",
-                        "navy":"#000080","teal":"#008080","purple":"#800080",
-                        "orange":"#ffa500","lime":"#00ff00","aqua":"#00ffff",
+                        "black": "#000000", "white": "#ffffff", "red": "#ff0000",
+                        "green": "#008000", "blue": "#0000ff", "yellow": "#ffff00",
+                        "gray": "#808080", "grey": "#808080", "silver": "#c0c0c0",
+                        "navy": "#000080", "teal": "#008080", "purple": "#800080",
+                        "orange": "#ffa500", "lime": "#00ff00", "aqua": "#00ffff",
                     }
-                    if val in named: return named[val]
-                    if val.startswith("#"): return val
-                    m = re.match(r"rgb\((\d+),(\d+),(\d+)\)", val.replace(" ",""))
-                    if m: return "#{:02x}{:02x}{:02x}".format(int(m.group(1)),int(m.group(2)),int(m.group(3)))
+                    if val in named:
+                        return named[val]
+                    if val.startswith("#"):
+                        return val
+                    m = re.match(r"rgb\((\d+),(\d+),(\d+)\)", val.replace(" ", ""))
+                    if m:
+                        return "#{:02x}{:02x}{:02x}".format(int(m.group(1)), int(m.group(2)), int(m.group(3)))
                     return None
+
                 def _contrast(h1, h2):
                     def _lum(h):
                         h = h.lstrip("#")
-                        if len(h)==3: h=h[0]*2+h[1]*2+h[2]*2
-                        if len(h)!=6: return None
+                        if len(h) == 3:
+                            h = h[0] * 2 + h[1] * 2 + h[2] * 2
+                        if len(h) != 6:
+                            return None
                         try:
-                            r,g,b = int(h[0:2],16)/255,int(h[2:4],16)/255,int(h[4:6],16)/255
-                            def _ch(v): return v/12.92 if v<=0.04045 else ((v+0.055)/1.055)**2.4
-                            return 0.2126*_ch(r)+0.7152*_ch(g)+0.0722*_ch(b)
-                        except: return None
-                    l1,l2=_lum(h1),_lum(h2)
-                    if l1 is None or l2 is None: return None
-                    lighter,darker=max(l1,l2),min(l1,l2)
-                    return (lighter+0.05)/(darker+0.05)
+                            r, g, b = int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255
+                            def _ch(v): return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055)**2.4
+                            return 0.2126 * _ch(r) + 0.7152 * _ch(g) + 0.0722 * _ch(b)
+                        except BaseException:
+                            return None
+                    l1, l2 = _lum(h1), _lum(h2)
+                    if l1 is None or l2 is None:
+                        return None
+                    lighter, darker = max(l1, l2), min(l1, l2)
+                    return (lighter + 0.05) / (darker + 0.05)
                 fg = _css_to_hex(color_m.group(1))
                 bg = _css_to_hex(bg_m.group(1))
                 if fg and bg and fg != "transparent" and bg != "transparent":
@@ -706,9 +713,9 @@ class SEOSpider(scrapy.Spider):
                         text_snippet = " ".join(el.css("::text").getall()).strip()[:40]
                         elem_str = "<{} style='{}'>{}".format(tag, style[:60], text_snippet)
                         if ratio < threshold:
-                            contrast_issues.append({"ratio": round(ratio,2), "element": elem_str[:200]})
+                            contrast_issues.append({"ratio": round(ratio, 2), "element": elem_str[:200]})
                         if ratio < 7.0:
-                            contrast_aaa_issues.append({"ratio": round(ratio,2), "element": elem_str[:200]})
+                            contrast_aaa_issues.append({"ratio": round(ratio, 2), "element": elem_str[:200]})
         a11y["contrast_issues"] = contrast_issues[:20]
         a11y["contrast_aaa_issues"] = contrast_aaa_issues[:20]
 
@@ -723,7 +730,7 @@ class SEOSpider(scrapy.Spider):
         justified_count = 0
         for el in response.css("[style]"):
             style = el.attrib.get("style", "").lower()
-            if "text-align:justify" in style.replace(" ","") or "text-align: justify" in style:
+            if "text-align:justify" in style.replace(" ", "") or "text-align: justify" in style:
                 justified_count += 1
         a11y["justified_text_count"] = justified_count
 
@@ -731,14 +738,14 @@ class SEOSpider(scrapy.Spider):
         text_spacing_important = []
         for style_tag in response.css("style::text").getall():
             if "!important" in style_tag and any(
-                p in style_tag for p in ["line-height","letter-spacing","word-spacing"]
+                p in style_tag for p in ["line-height", "letter-spacing", "word-spacing"]
             ):
                 text_spacing_important.append("<style>...!important on text spacing...")
                 break
         for el in response.css("[style]"):
             style = el.attrib.get("style", "").lower()
             if "!important" in style and any(
-                p in style for p in ["line-height","letter-spacing","word-spacing"]
+                p in style for p in ["line-height", "letter-spacing", "word-spacing"]
             ):
                 tag = el.root.tag
                 text_spacing_important.append("<{} style='{}' />".format(tag, style[:60]))
@@ -772,9 +779,9 @@ class SEOSpider(scrapy.Spider):
         outline_none = []
         for el in response.css("[style]"):
             style = el.attrib.get("style", "").lower()
-            if "outline:none" in style.replace(" ","") or "outline: none" in style:
+            if "outline:none" in style.replace(" ", "") or "outline: none" in style:
                 tag = el.root.tag
-                outline_none.append("<{} style='{}'>".format(tag, el.attrib.get("style","")[:60]))
+                outline_none.append("<{} style='{}'>".format(tag, el.attrib.get("style", "")[:60]))
         a11y["outline_none_no_alternative"] = outline_none[:10]
 
         # --- links without underline ---
@@ -782,7 +789,7 @@ class SEOSpider(scrapy.Spider):
         for a_el in response.css("a[style]"):
             style = a_el.attrib.get("style", "").lower()
             aria_role = a_el.attrib.get("role", "")
-            if ("text-decoration:none" in style.replace(" ","") or
+            if ("text-decoration:none" in style.replace(" ", "") or
                     "text-decoration: none" in style):
                 if not aria_role:
                     href = a_el.attrib.get("href", "")[:60]
@@ -818,8 +825,8 @@ class SEOSpider(scrapy.Spider):
         # --- auto-refresh (meta refresh with interval > 0) ---
         auto_refresh_no_ctrl = []
         for meta in response.css("meta[http-equiv]"):
-            if meta.attrib.get("http-equiv","").lower() == "refresh":
-                content = meta.attrib.get("content","")
+            if meta.attrib.get("http-equiv", "").lower() == "refresh":
+                content = meta.attrib.get("content", "")
                 try:
                     interval = int(content.split(";")[0].strip())
                     if interval > 0:
@@ -839,12 +846,12 @@ class SEOSpider(scrapy.Spider):
         # --- sticky header without scroll-padding ---
         sticky_no_scroll_padding = False
         for style_text in response.css("style::text").getall():
-            if "position:sticky" in style_text.replace(" ","") or "position: sticky" in style_text:
+            if "position:sticky" in style_text.replace(" ", "") or "position: sticky" in style_text:
                 if "scroll-padding" not in style_text:
                     sticky_no_scroll_padding = True
                     break
         for el in response.css("[style]"):
-            if "position:sticky" in el.attrib.get("style","").replace(" ",""):
+            if "position:sticky" in el.attrib.get("style", "").replace(" ", ""):
                 sticky_no_scroll_padding = True
                 break
         a11y["sticky_header_no_scroll_padding"] = sticky_no_scroll_padding
@@ -915,7 +922,7 @@ class SEOSpider(scrapy.Spider):
         a11y["has_breadcrumb"] = has_breadcrumb
 
         has_help = any(
-            t in ["hilfe","help","faq","support","kontakt","contact"]
+            t in ["hilfe", "help", "faq", "support", "kontakt", "contact"]
             for t in all_link_texts
         ) or any(
             "hilfe" in h.lower() or "/help" in h.lower() or "/faq" in h.lower()

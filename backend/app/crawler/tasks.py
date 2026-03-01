@@ -431,14 +431,14 @@ def run_crawl(
             logger.error("robots/sitemap analysis failed for crawl %d: %s", crawl_id, e)
             db.rollback()
 
-                # --- Post-crawl v0.7.0: Email Alerts ---
+            # --- Post-crawl v0.7.0: Email Alerts ---
         try:
             from app.models import AlertConfig
             from app.notifications.email_sender import send_alert_email_sync
             import os
             alert_configs = db.query(AlertConfig).filter(
                 AlertConfig.project_id == crawl.project_id,
-                AlertConfig.enabled == True,
+                AlertConfig.enabled,
             ).all()
             for ac in alert_configs:
                 should_send = False

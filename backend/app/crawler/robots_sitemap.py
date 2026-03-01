@@ -3,7 +3,6 @@ import requests
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 import xml.etree.ElementTree as ET
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
