@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// API_BASE: empty string = relative URLs (works with Nginx /api/ proxy on any host)
+// Set NEXT_PUBLIC_API_URL=http://localhost:8000 for local dev without Docker
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {

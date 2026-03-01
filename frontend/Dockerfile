@@ -5,6 +5,10 @@ RUN npm ci
 
 FROM node:20-alpine AS builder
 WORKDIR /app
+# Build-time API URL - empty string = relative URLs (works with Nginx on any host/domain)
+# Override with full URL only for standalone deployments without Nginx
+ARG NEXT_PUBLIC_API_URL=""
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
