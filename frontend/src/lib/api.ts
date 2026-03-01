@@ -602,6 +602,64 @@ export const api = {
     request<{ message: string }>(`/api/projects/${projectId}/alerts/test`, {
       method: "POST",
     }),
+
+  // ---- v0.9.0: Mobile SEO ----
+  getMobileSummary: (projectId: number) =>
+    request<MobileSummary>(`/api/mobile/projects/${projectId}/summary`),
+  getMobileIssues: (
+    projectId: number,
+    params?: {
+      min_score?: number;
+      max_score?: number;
+      sort_by?: string;
+      order?: string;
+      limit?: number;
+    }
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.min_score !== undefined) q.set("min_score", String(params.min_score));
+    if (params?.max_score !== undefined) q.set("max_score", String(params.max_score));
+    if (params?.sort_by) q.set("sort_by", params.sort_by);
+    if (params?.order) q.set("order", params.order);
+    if (params?.limit) q.set("limit", String(params.limit));
+    return request<MobileIssuesResponse>(`/api/mobile/projects/${projectId}/issues?${q}`);
+  },
+
+  // ---- v0.9.0: Google Analytics 4 ----
+  getGA4Status: (projectId: number) =>
+    request<GA4Status>(`/api/projects/${projectId}/ga4/status`),
+  getGA4AuthUrl: (projectId: number) =>
+    request<{ auth_url: string }>(`/api/integrations/ga4/auth-url?project_id=${projectId}`),
+  disconnectGA4: (projectId: number) =>
+    request<void>(`/api/projects/${projectId}/integrations/ga4`, { method: "DELETE" }),
+  getGA4Overview: (projectId: number, dateRange?: string) => {
+    const q = dateRange ? `?date_range=${dateRange}` : "";
+    return request<GA4Overview>(`/api/projects/${projectId}/ga4/overview${q}`);
+  },
+  getGA4TopPages: (
+    projectId: number,
+    params?: { limit?: number; date_range?: string }
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.date_range) q.set("date_range", params.date_range);
+    return request<GA4TopPage[]>(`/api/projects/${projectId}/ga4/top-pages?${q}`);
+  },
+  getGA4Sources: (projectId: number, dateRange?: string) => {
+    const q = dateRange ? `?date_range=${dateRange}` : "";
+    return request<GA4Source[]>(`/api/projects/${projectId}/ga4/sources${q}`);
+  },
+  getGA4Devices: (projectId: number, dateRange?: string) => {
+    const q = dateRange ? `?date_range=${dateRange}` : "";
+    return request<GA4DeviceBreakdown>(`/api/projects/${projectId}/ga4/devices${q}`);
+  },
+  getGA4Conversions: (projectId: number, dateRange?: string) => {
+    const q = dateRange ? `?date_range=${dateRange}` : "";
+    return request<GA4Conversion[]>(`/api/projects/${projectId}/ga4/conversions${q}`);
+  },
+  syncGA4: (projectId: number) =>
+    request<void>(`/api/projects/${projectId}/ga4/sync`, { method: "POST" }),
+
 };
 
 // ============================================================
@@ -692,4 +750,100 @@ export interface GSCStatus {
   connected: boolean;
   site_url?: string;
   token_expiry?: string;
+}
+
+// ============================================================
+// v0.9.0 Types — Mobile SEO & GA4 Analytics
+// ============================================================
+
+export interface MobileCheck {
+  viewport_meta: boolean;
+  viewport_scalable: boolean;
+  font_size_readable: boolean;
+  tap_targets_ok: boolean;
+  touch_targets_count: number;
+  small_touch_targets: number;
+  media_queries_detected: boolean;
+  responsive_images: boolean;
+  mobile_meta_theme: boolean;
+  no_horizontal_scroll: boolean;
+  amp_page: boolean;
+  structured_nav: boolean;
+  mobile_score: number;
+  mobile_issues: string[];
+}
+
+export interface MobileSummary {
+  project_id: number;
+  crawl_id: number | null;
+  total_pages: number;
+  pages_with_issues: number;
+  average_score: number;
+  score_distribution: {
+    '0-20': number;
+    '21-40': number;
+    '41-60': number;
+    '61-80': number;
+    '81-100': number;
+  };
+}
+
+export interface MobilePageIssue {
+  page_id: number;
+  url: string;
+  mobile_score: number;
+  issues_count: number;
+  mobile_issues: string[];
+  mobile_check: MobileCheck;
+}
+
+export interface MobileIssuesResponse {
+  crawl_id: number;
+  pages: MobilePageIssue[];
+  total_count: number;
+}
+
+export interface GA4Status {
+  connected: boolean;
+  property_id?: string;
+  last_sync?: string;
+}
+
+export interface GA4Overview {
+  sessions: number;
+  pageviews: number;
+  bounce_rate: number;
+  avg_session_duration: number;
+  conversions: number;
+  trend?: {
+    sessions_change: number;
+    pageviews_change: number;
+    bounce_rate_change: number;
+  };
+}
+
+export interface GA4TopPage {
+  page_path: string;
+  sessions: number;
+  pageviews: number;
+  avg_duration: number;
+  bounce_rate: number;
+}
+
+export interface GA4Source {
+  source: string;
+  medium: string;
+  sessions: number;
+  new_users: number;
+}
+
+export interface GA4DeviceBreakdown {
+  desktop: number;
+  mobile: number;
+  tablet: number;
+}
+
+export interface GA4Conversion {
+  event_name: string;
+  conversions: number;
 }

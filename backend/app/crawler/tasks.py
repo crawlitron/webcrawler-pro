@@ -232,6 +232,10 @@ def run_crawl(
                 kw_data = analyzer.analyze_keywords(pd)
                 if kw_data.get("top_keywords"):
                     spider_extra["keywords"] = kw_data
+                # v0.9.0: Mobile-First SEO analysis — store in extra_data
+                mobile_check = analyzer.analyze_mobile_seo(pd, soup=None)
+                if mobile_check:
+                    spider_extra["mobile_check"] = mobile_check
 
                 # v0.5.0: Performance score
                 perf_score = _calculate_performance_score(pd)

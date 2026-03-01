@@ -8,6 +8,7 @@ from sqlalchemy import text
 from .database import engine, Base
 from .routers import projects, crawls, pages, analytics
 from .routers import auth, teams, integrations
+from .routers import mobile
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -106,6 +107,43 @@ def run_migrations():
             created_at TIMESTAMP DEFAULT NOW()
         )
         """,
+        # v0.9.0: Google Analytics 4 Integration
+        """
+        CREATE TABLE IF NOT EXISTS ga4_tokens (
+            id SERIAL PRIMARY KEY,
+            project_id INTEGER UNIQUE NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            access_token VARCHAR(512) NOT NULL,
+            refresh_token VARCHAR(512) NOT NULL,
+            property_id VARCHAR(255) NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS ga4_metrics (
+            id SERIAL PRIMARY KEY,
+            project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            date DATE NOT NULL,
+            page_path VARCHAR(2048),
+            sessions INTEGER DEFAULT 0,
+            pageviews INTEGER DEFAULT 0,
+            bounce_rate FLOAT DEFAULT 0.0,
+            avg_duration FLOAT DEFAULT 0.0,
+            device_category VARCHAR(50),
+            source_medium VARCHAR(255),
+            conversions INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS ix_ga4_metrics_project_date 
+        ON ga4_metrics (project_id, date)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS ix_ga4_metrics_page 
+        ON ga4_metrics (project_id, page_path)
+        """,
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -166,6 +204,7 @@ app.include_router(analytics.router)
 app.include_router(auth.router)
 app.include_router(teams.router)
 app.include_router(integrations.router)
+app.include_router(mobile.router)
 
 # Optional routers (loaded if module exists)
 try:

@@ -178,6 +178,14 @@ export default function ProjectPage() {
             className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-green-50 hover:border-green-300 hover:text-green-700 transition-colors">
             ♿ Accessibility
           </Link>
+          <Link href={`/projects/${id}/mobile`}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-colors">
+            📱 Mobile SEO
+          </Link>
+          <Link href={`/projects/${id}/analytics/ga4`}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-colors">
+            📊 Google Analytics
+          </Link>
           <Link href={`/projects/${id}/settings`}
             className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 hover:text-gray-900 transition-colors">
             ⚙️ Settings

@@ -202,3 +202,266 @@ def gsc_coverage(
         return {"site_url": conn.site_url, "sitemaps": sitemaps}
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v0.9.0 Feature: Google Analytics 4 Integration
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/api/integrations/ga4/auth-url")
+async def ga4_auth_url(
+    project_id: int = Query(...),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    """Get GA4 OAuth2 authorization URL."""
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(503, "Google OAuth not configured — set GOOGLE_CLIENT_ID in .env")
+    
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+    
+    try:
+        from ..integrations.google_analytics import GA4Integration
+        ga4 = GA4Integration(db)
+        auth_url = await ga4.get_auth_url(
+            project_id=project_id,
+            redirect_uri=os.getenv(
+                "GA4_REDIRECT_URI",
+                "http://localhost:44544/api/integrations/ga4/callback"
+            ),
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET
+        )
+        return {"auth_url": auth_url}
+    except Exception as e:
+        logger.error("GA4 auth URL error: %s", e)
+        raise HTTPException(500, str(e))
+
+
+@router.get("/api/integrations/ga4/callback")
+async def ga4_callback(
+    code: str = Query(...),
+    state: str = Query(default=""),
+    db: Session = Depends(get_db),
+):
+    """Handle GA4 OAuth2 callback."""
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(503, "Google OAuth not configured")
+    
+    try:
+        project_id = int(state) if state.isdigit() else None
+        if not project_id:
+            raise HTTPException(400, "Invalid state parameter")
+        
+        from ..integrations.google_analytics import GA4Integration
+        ga4 = GA4Integration(db)
+        result = await ga4.handle_callback(
+            code=code,
+            project_id=project_id,
+            redirect_uri=os.getenv(
+                "GA4_REDIRECT_URI",
+                "http://localhost:44544/api/integrations/ga4/callback"
+            ),
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET
+        )
+        return RedirectResponse(url=f"/projects/{project_id}/settings?ga4=connected")
+    except Exception as e:
+        logger.error("GA4 callback error: %s", e)
+        return RedirectResponse(url="/settings/integrations?ga4=error")
+
+
+@router.delete("/api/projects/{project_id}/integrations/ga4")
+async def ga4_disconnect(
+    project_id: int,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    """Disconnect GA4 integration."""
+    from ..models import GA4Token, GA4Metric
+    
+    token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
+    if token:
+        db.query(GA4Metric).filter(GA4Metric.project_id == project_id).delete()
+        db.delete(token)
+        db.commit()
+    
+    return {"message": "GA4 disconnected"}
+
+
+@router.get("/api/projects/{project_id}/ga4/status")
+async def ga4_status(
+    project_id: int,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    """Get GA4 connection status."""
+    from ..models import GA4Token
+    
+    token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
+    return {
+        "connected": token is not None,
+        "property_id": token.property_id if token else None,
+        "expires_at": token.expires_at if token else None,
+    }
+
+
+@router.get("/api/projects/{project_id}/ga4/overview")
+async def ga4_overview(
+    project_id: int,
+    date_range: str = Query(default="last30days"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    """Get GA4 KPI overview."""
+    from ..models import GA4Token
+    
+    token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
+    if not token:
+        raise HTTPException(404, "GA4 not connected to this project")
+    
+    try:
+        from ..integrations.google_analytics import GA4Integration
+        ga4 = GA4Integration(db)
+        overview = await ga4.get_overview(
+            property_id=token.property_id,
+            date_range=date_range
+        )
+        return overview
+    except Exception as e:
+        logger.error("GA4 overview error: %s", e)
+        raise HTTPException(500, str(e))
+
+
+@router.get("/api/projects/{project_id}/ga4/top-pages")
+async def ga4_top_pages(
+    project_id: int,
+    limit: int = Query(default=10, ge=1, le=100),
+    date_range: str = Query(default="last30days"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    """Get top pages by sessions."""
+    from ..models import GA4Token
+    
+    token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
+    if not token:
+        raise HTTPException(404, "GA4 not connected to this project")
+    
+    try:
+        from ..integrations.google_analytics import GA4Integration
+        ga4 = GA4Integration(db)
+        pages = await ga4.get_top_pages(
+            property_id=token.property_id,
+            limit=limit,
+            date_range=date_range
+        )
+        return {"pages": pages}
+    except Exception as e:
+        logger.error("GA4 top pages error: %s", e)
+        raise HTTPException(500, str(e))
+
+
+@router.get("/api/projects/{project_id}/ga4/sources")
+async def ga4_traffic_sources(
+    project_id: int,
+    date_range: str = Query(default="last30days"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    """Get traffic sources breakdown."""
+    from ..models import GA4Token
+    
+    token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
+    if not token:
+        raise HTTPException(404, "GA4 not connected to this project")
+    
+    try:
+        from ..integrations.google_analytics import GA4Integration
+        ga4 = GA4Integration(db)
+        sources = await ga4.get_traffic_sources(
+            property_id=token.property_id,
+            date_range=date_range
+        )
+        return {"sources": sources}
+    except Exception as e:
+        logger.error("GA4 traffic sources error: %s", e)
+        raise HTTPException(500, str(e))
+
+
+@router.get("/api/projects/{project_id}/ga4/devices")
+async def ga4_device_breakdown(
+    project_id: int,
+    date_range: str = Query(default="last30days"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    """Get device category breakdown."""
+    from ..models import GA4Token
+    
+    token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
+    if not token:
+        raise HTTPException(404, "GA4 not connected to this project")
+    
+    try:
+        from ..integrations.google_analytics import GA4Integration
+        ga4 = GA4Integration(db)
+        devices = await ga4.get_device_breakdown(
+            property_id=token.property_id,
+            date_range=date_range
+        )
+        return {"devices": devices}
+    except Exception as e:
+        logger.error("GA4 device breakdown error: %s", e)
+        raise HTTPException(500, str(e))
+
+
+@router.get("/api/projects/{project_id}/ga4/conversions")
+async def ga4_conversion_events(
+    project_id: int,
+    date_range: str = Query(default="last30days"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    """Get conversion events."""
+    from ..models import GA4Token
+    
+    token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
+    if not token:
+        raise HTTPException(404, "GA4 not connected to this project")
+    
+    try:
+        from ..integrations.google_analytics import GA4Integration
+        ga4 = GA4Integration(db)
+        events = await ga4.get_conversion_events(
+            property_id=token.property_id,
+            date_range=date_range
+        )
+        return {"events": events}
+    except Exception as e:
+        logger.error("GA4 conversion events error: %s", e)
+        raise HTTPException(500, str(e))
+
+
+@router.post("/api/projects/{project_id}/ga4/sync")
+async def ga4_manual_sync(
+    project_id: int,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    """Trigger manual GA4 data sync."""
+    from ..models import GA4Token
+    
+    token = db.query(GA4Token).filter(GA4Token.project_id == project_id).first()
+    if not token:
+        raise HTTPException(404, "GA4 not connected to this project")
+    
+    try:
+        from ..crawler.scheduled_tasks import sync_ga4_data
+        sync_ga4_data.delay(project_id)
+        return {"message": "GA4 sync triggered", "project_id": project_id}
+    except Exception as e:
+        logger.error("GA4 manual sync error: %s", e)
+        raise HTTPException(500, str(e))

@@ -246,3 +246,54 @@ def run_scheduled_crawls(self):
         raise self.retry(exc=exc, countdown=120)
     finally:
         db.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v0.9.0 Feature: Google Analytics 4 Sync Tasks
+# ═══════════════════════════════════════════════════════════════════════
+
+@shared_task(name="ga4.sync_project", bind=True, max_retries=3)
+def sync_ga4_data(self, project_id: int):
+    """Daily GA4 data sync for connected projects."""
+    from app.database import SessionLocal
+    from app.integrations.google_analytics import GA4Integration
+    import asyncio
+    
+    db: Session = SessionLocal()
+    try:
+        ga4 = GA4Integration(db)
+        asyncio.run(ga4.sync_to_db(project_id))
+        logger.info("GA4 sync completed for project %s", project_id)
+        return {"project_id": project_id, "status": "success"}
+    except Exception as exc:
+        logger.error("GA4 sync failed for project %s: %s", project_id, exc)
+        db.rollback()
+        raise self.retry(exc=exc, countdown=300)
+    finally:
+        db.close()
+
+
+@shared_task(name="ga4.sync_all_projects", bind=True, max_retries=1)
+def sync_all_ga4_projects(self):
+    """Sync all projects with GA4 connections."""
+    from app.database import SessionLocal
+    from app.models import GA4Token
+    
+    db: Session = SessionLocal()
+    try:
+        tokens = db.query(GA4Token).all()
+        count = len(tokens)
+        
+        for token in tokens:
+            sync_ga4_data.delay(token.project_id)
+        
+        logger.info("Triggered GA4 sync for %s projects", count)
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "projects_triggered": count,
+        }
+    except Exception as exc:
+        logger.error("Failed to trigger GA4 syncs: %s", exc)
+        raise self.retry(exc=exc, countdown=120)
+    finally:
+        db.close()

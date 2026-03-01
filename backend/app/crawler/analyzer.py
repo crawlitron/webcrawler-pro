@@ -1322,3 +1322,165 @@ class SEOAnalyzer:
             return []
         counter = Counter(filtered)
         return counter.most_common(top_n)
+
+    # ------------------------------------------------------------------
+    # Feature: Mobile-First SEO Analysis
+    # ------------------------------------------------------------------
+    def analyze_mobile_seo(self, page: Dict[str, Any], soup) -> Dict[str, Any]:
+        """Comprehensive mobile-first SEO analysis.
+        Checks viewport, font sizes, touch targets, responsive images, and more.
+        Returns mobile_check dict with score, issues, and detailed metrics.
+        """
+        mobile_check = {
+            'viewport_meta': False,
+            'viewport_scalable': False,
+            'font_size_readable': False,
+            'tap_targets_ok': False,
+            'touch_targets_count': 0,
+            'small_touch_targets': 0,
+            'media_queries_detected': False,
+            'responsive_images': False,
+            'mobile_meta_theme': False,
+            'no_horizontal_scroll': False,
+            'amp_page': False,
+            'structured_nav': False,
+            'mobile_score': 0,
+            'mobile_issues': [],
+        }
+        
+        if not soup:
+            mobile_check['mobile_issues'].append('No HTML content available for analysis')
+            return mobile_check
+        
+        issues: List[str] = []
+        
+        # 1. Check viewport meta tag
+        viewport = soup.find('meta', attrs={'name': 'viewport'})
+        if viewport and viewport.get('content'):
+            content = viewport.get('content', '').lower()
+            mobile_check['viewport_meta'] = 'width=device-width' in content
+            mobile_check['viewport_scalable'] = 'user-scalable=no' not in content
+            
+            if not mobile_check['viewport_meta']:
+                issues.append('Viewport meta tag missing width=device-width')
+            if not mobile_check['viewport_scalable']:
+                issues.append('Viewport prevents user scaling (user-scalable=no)')
+        else:
+            issues.append('Missing viewport meta tag')
+        
+        # 2. Check font size on body/html
+        font_size_ok = False
+        for elem in [soup.find('body'), soup.find('html')]:
+            if elem and elem.get('style'):
+                style = elem.get('style', '')
+                font_match = re.search(r'font-size:\s*(\d+)px', style)
+                if font_match:
+                    size = int(font_match.group(1))
+                    if size >= 16:
+                        font_size_ok = True
+                        break
+        mobile_check['font_size_readable'] = font_size_ok
+        if not font_size_ok:
+            issues.append('Base font size may be too small (< 16px)')
+        
+        # 3. Count touch targets and check sizes
+        touch_elements = soup.find_all(['a', 'button', 'input', 'textarea', 'select'])
+        mobile_check['touch_targets_count'] = len(touch_elements)
+        
+        small_targets = 0
+        for elem in touch_elements:
+            style = elem.get('style', '')
+            width_match = re.search(r'width:\s*(\d+)px', style)
+            height_match = re.search(r'height:\s*(\d+)px', style)
+            
+            if width_match or height_match:
+                width = int(width_match.group(1)) if width_match else 48
+                height = int(height_match.group(1)) if height_match else 48
+                if width < 48 or height < 48:
+                    small_targets += 1
+        
+        mobile_check['small_touch_targets'] = small_targets
+        mobile_check['tap_targets_ok'] = small_targets == 0
+        
+        if small_targets > 0:
+            msg = '{} touch targets smaller than 48x48px'.format(small_targets)
+            issues.append(msg)
+        
+        # 4. Check for media queries in style tags
+        style_tags = soup.find_all('style')
+        media_query_found = False
+        for style in style_tags:
+            if style.string and '@media' in style.string:
+                media_query_found = True
+                break
+        mobile_check['media_queries_detected'] = media_query_found
+        if not media_query_found:
+            issues.append('No @media queries detected in inline styles')
+        
+        # 5. Check for responsive images
+        images = soup.find_all('img')
+        responsive_img_count = 0
+        for img in images:
+            if img.get('srcset') or img.get('sizes'):
+                responsive_img_count += 1
+        
+        mobile_check['responsive_images'] = responsive_img_count > 0
+        if images and responsive_img_count == 0:
+            issues.append('No responsive images with srcset/sizes attributes')
+        
+        # 6. Check for theme-color meta tag
+        theme_color = soup.find('meta', attrs={'name': 'theme-color'})
+        mobile_check['mobile_meta_theme'] = theme_color is not None
+        if not theme_color:
+            issues.append('Missing theme-color meta tag for mobile browsers')
+        
+        # 7. Check for horizontal scroll on body/html
+        no_h_scroll = True
+        for elem in [soup.find('body'), soup.find('html')]:
+            if elem and elem.get('style'):
+                if 'overflow-x:scroll' in elem.get('style', '').replace(' ', ''):
+                    no_h_scroll = False
+                    break
+        mobile_check['no_horizontal_scroll'] = no_h_scroll
+        if not no_h_scroll:
+            issues.append('Horizontal scrolling detected on body/html')
+        
+        # 8. Check for AMP
+        html_tag = soup.find('html')
+        if html_tag:
+            amp = html_tag.has_attr('amp') or html_tag.has_attr('⚡')
+            mobile_check['amp_page'] = amp
+        
+        # 9. Check for structured navigation
+        nav = soup.find('nav')
+        mobile_check['structured_nav'] = nav is not None
+        if not nav:
+            issues.append('Missing <nav> element for structured navigation')
+        
+        # 10. Calculate mobile score (0-100)
+        score = 0
+        if mobile_check['viewport_meta']:
+            score += 15
+        if mobile_check['viewport_scalable']:
+            score += 10
+        if mobile_check['font_size_readable']:
+            score += 10
+        if mobile_check['tap_targets_ok']:
+            score += 15
+        if mobile_check['media_queries_detected']:
+            score += 15
+        if mobile_check['responsive_images']:
+            score += 10
+        if mobile_check['mobile_meta_theme']:
+            score += 5
+        if mobile_check['no_horizontal_scroll']:
+            score += 10
+        if mobile_check['amp_page']:
+            score += 5
+        if mobile_check['structured_nav']:
+            score += 5
+        
+        mobile_check['mobile_score'] = score
+        mobile_check['mobile_issues'] = issues
+        
+        return mobile_check

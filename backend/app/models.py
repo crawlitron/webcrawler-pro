@@ -39,6 +39,7 @@ class Project(Base):
     js_wait_time = Column(Float, default=2.0)
     crawls = relationship("Crawl", back_populates="project", cascade="all, delete-orphan")
 
+    ga4_token = relationship("GA4Token", back_populates="project", uselist=False)
 
 class Crawl(Base):
     __tablename__ = "crawls"
@@ -214,3 +215,51 @@ class KeywordRanking(Base):
     url = Column(String(2048), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     project = relationship("Project")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v0.9.0 Feature: Google Analytics 4 Integration
+# ═══════════════════════════════════════════════════════════════════════
+
+from sqlalchemy import Date, Index
+
+
+class GA4Token(Base):
+    """Google Analytics 4 OAuth tokens and connection info."""
+    __tablename__ = 'ga4_tokens'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey('projects.id'), unique=True, nullable=False)
+    access_token = Column(String(512), nullable=False)
+    refresh_token = Column(String(512), nullable=False)
+    property_id = Column(String(255), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    project = relationship('Project', back_populates='ga4_token')
+
+
+class GA4Metric(Base):
+    """Google Analytics 4 metrics data."""
+    __tablename__ = 'ga4_metrics'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey('projects.id'), nullable=False)
+    date = Column(Date, nullable=False)
+    page_path = Column(String(2048), nullable=True)
+    sessions = Column(Integer, default=0)
+    pageviews = Column(Integer, default=0)
+    bounce_rate = Column(Float, default=0.0)
+    avg_duration = Column(Float, default=0.0)
+    device_category = Column(String(50), nullable=True)
+    source_medium = Column(String(255), nullable=True)
+    conversions = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (
+        Index('ix_ga4_metrics_project_date', 'project_id', 'date'),
+        Index('ix_ga4_metrics_page', 'project_id', 'page_path'),
+    )
+    
+    project = relationship('Project')

@@ -31,7 +31,12 @@ celery_app.conf.update(
         "run-scheduled-crawls": {
             "task": "tasks.run_scheduled_crawls",
             "schedule": crontab(minute=0),
+        # GA4 data sync: runs daily at 04:00 UTC
+        "sync-ga4-daily": {
+            "task": "ga4.sync_all_projects",
+            "schedule": crontab(hour=4, minute=0),
         },
+            },
     },
 )
 
