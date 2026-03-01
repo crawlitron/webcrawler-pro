@@ -6,3 +6,4 @@ per-file-ignores =
     app/models.py:F811
     app/routers/teams.py:F541
     app/schemas_additions.py:F401
+ignore =  E128
