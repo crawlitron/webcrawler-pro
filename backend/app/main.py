@@ -8,6 +8,7 @@ from sqlalchemy import text
 from .database import engine, Base
 from .routers import projects, crawls, pages, analytics
 from .routers import auth, teams, integrations
+from .routers import setup
 from .routers import mobile
 
 logging.basicConfig(level=logging.INFO)
@@ -220,6 +221,7 @@ app.include_router(pages.router)
 app.include_router(analytics.router)
 
 # v0.8.0 routers
+app.include_router(setup.router)
 app.include_router(auth.router)
 app.include_router(teams.router)
 app.include_router(integrations.router)

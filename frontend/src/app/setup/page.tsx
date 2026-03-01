@@ -1,292 +1,234 @@
-'use client';
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Progress } from '@/components/ui/progress';
-import { useToast } from '@/components/ui/use-toast';
-import { apiPost } from '@/lib/api';
-import { SetupStatus } from '@/lib/types';
+const STEPS = ["Admin-Konto", "E-Mail", "Google APIs", "Allgemein"];
 
-type SetupStep = 'admin' | 'email' | 'google' | 'general';
-
-const STEPS: Array<{ id: SetupStep; title: string; optional?: boolean }> = [
-  { id: 'admin', title: 'Admin Account' },
-  { id: 'email', title: 'Email Settings', optional: true },
-  { id: 'google', title: 'Google Integrations', optional: true },
-  { id: 'general', title: 'General Settings' },
-];
+interface AdminData { email: string; password: string; confirmPassword: string; full_name: string; }
+interface EmailData { smtp_host: string; smtp_port: string; smtp_user: string; smtp_password: string; smtp_from: string; }
+interface GoogleData { google_client_id: string; google_client_secret: string; ga_measurement_id: string; }
+interface GeneralData { app_url: string; max_concurrent_crawls: string; }
 
 export default function SetupPage() {
   const router = useRouter();
-  const { toast } = useToast();
-  
-  const [currentStep, setCurrentStep] = useState<SetupStep>('admin');
+  const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [completedSteps, setCompletedSteps] = useState<SetupStep[]>([]);
-  
-  const [adminData, setAdminData] = useState({
-    email: '',
-    password: '',
-    name: ''
-  });
-  
-  const [emailData, setEmailData] = useState({
-    smtpHost: '',
-    smtpPort: '587',
-    smtpUser: '',
-    smtpPassword: '',
-    senderEmail: ''
-  });
-  
-  const [googleData, setGoogleData] = useState({
-    clientId: '',
-    clientSecret: '',
-    measurementId: ''
-  });
-  
-  const [generalData, setGeneralData] = useState({
-    appUrl: '',
-    maxConcurrentCrawls: '5'
-  });
+  const [error, setError] = useState("");
 
-  const handleSubmit = async () => {
+  const [admin, setAdmin] = useState<AdminData>({ email: "", password: "", confirmPassword: "", full_name: "" });
+  const [email, setEmail] = useState<EmailData>({ smtp_host: "", smtp_port: "587", smtp_user: "", smtp_password: "", smtp_from: "" });
+  const [google, setGoogle] = useState<GoogleData>({ google_client_id: "", google_client_secret: "", ga_measurement_id: "" });
+  const [general, setGeneral] = useState<GeneralData>({ app_url: "", max_concurrent_crawls: "3" });
+
+  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm";
+  const labelClass = "block text-sm font-medium text-gray-700 mb-1";
+
+  async function handleFinish() {
+    if (!admin.email || !admin.password) { setError("Email und Passwort sind Pflichtfelder."); return; }
+    if (admin.password !== admin.confirmPassword) { setError("Passwörter stimmen nicht überein."); return; }
+    if (admin.password.length < 8) { setError("Passwort muss mindestens 8 Zeichen haben."); return; }
+
+    setLoading(true); setError("");
     try {
-      setLoading(true);
-      
-      const allData = {
-        ...adminData,
-        ...emailData,
-        ...googleData,
-        ...generalData
-      };
-      
-      await apiPost('/api/setup/complete', {
-        admin_email: adminData.email,
-        admin_password: adminData.password,
-        admin_name: adminData.name,
-        settings: allData
+      const settings: Record<string, string> = {};
+      if (email.smtp_host) { Object.assign(settings, { smtp_host: email.smtp_host, smtp_port: email.smtp_port, smtp_user: email.smtp_user, smtp_password: email.smtp_password, smtp_from: email.smtp_from }); }
+      if (google.google_client_id) { Object.assign(settings, { google_client_id: google.google_client_id, google_client_secret: google.google_client_secret, ga_measurement_id: google.ga_measurement_id }); }
+      if (general.app_url) { Object.assign(settings, { app_url: general.app_url, max_concurrent_crawls: general.max_concurrent_crawls }); }
+
+      const res = await fetch("/api/setup/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ admin: { email: admin.email, password: admin.password, full_name: admin.full_name }, settings }),
       });
-      
-      router.push('/auth/login');
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Setup failed',
-        variant: 'destructive'
-      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as {detail?: string}).detail || "Setup fehlgeschlagen");
+      }
+      router.push("/auth/login?setup=done");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Unbekannter Fehler");
     } finally {
       setLoading(false);
     }
-  };
-
-  const getStepComponent = () => {
-    switch (currentStep) {
-      case 'admin':
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="email">Admin Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={adminData.email}
-                onChange={(e) => setAdminData({...adminData, email: e.target.value})}
-              />
-            </div>
-            <div>
-              <Label htmlFor="password">Password (min. 8 characters)</Label>
-              <Input
-                id="password"
-                type="password"
-                value={adminData.password}
-                onChange={(e) => setAdminData({...adminData, password: e.target.value})}
-              />
-            </div>
-            <div>
-              <Label htmlFor="name">Admin Name</Label>
-              <Input
-                id="name"
-                value={adminData.name}
-                onChange={(e) => setAdminData({...adminData, name: e.target.value})}
-              />
-            </div>
-          </div>
-        );
-      
-      case 'email':
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="smtpHost">SMTP Host</Label>
-              <Input
-                id="smtpHost"
-                value={emailData.smtpHost}
-                onChange={(e) => setEmailData({...emailData, smtpHost: e.target.value})}
-              />
-            </div>
-            <div>
-              <Label htmlFor="smtpPort">SMTP Port</Label>
-              <Input
-                id="smtpPort"
-                type="number"
-                value={emailData.smtpPort}
-                onChange={(e) => setEmailData({...emailData, smtpPort: e.target.value})}
-              />
-            </div>
-            <div>
-              <Label htmlFor="smtpUser">SMTP Username</Label>
-              <Input
-                id="smtpUser"
-                value={emailData.smtpUser}
-                onChange={(e) => setEmailData({...emailData, smtpUser: e.target.value})}
-              />
-            </div>
-            <div>
-              <Label htmlFor="smtpPassword">SMTP Password</Label>
-              <Input
-                id="smtpPassword"
-                type="password"
-                value={emailData.smtpPassword}
-                onChange={(e) => setEmailData({...emailData, smtpPassword: e.target.value})}
-              />
-            </div>
-            <div>
-              <Label htmlFor="senderEmail">Sender Email</Label>
-              <Input
-                id="senderEmail"
-                type="email"
-                value={emailData.senderEmail}
-                onChange={(e) => setEmailData({...emailData, senderEmail: e.target.value})}
-              />
-            </div>
-          </div>
-        );
-      
-      case 'google':
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="clientId">Google Search Console Client ID</Label>
-              <Input
-                id="clientId"
-                value={googleData.clientId}
-                onChange={(e) => setGoogleData({...googleData, clientId: e.target.value})}
-              />
-            </div>
-            <div>
-              <Label htmlFor="clientSecret">Google Search Console Client Secret</Label>
-              <Input
-                id="clientSecret"
-                type="password"
-                value={googleData.clientSecret}
-                onChange={(e) => setGoogleData({...googleData, clientSecret: e.target.value})}
-              />
-            </div>
-            <div>
-              <Label htmlFor="measurementId">Google Analytics Measurement ID</Label>
-              <Input
-                id="measurementId"
-                value={googleData.measurementId}
-                onChange={(e) => setGoogleData({...googleData, measurementId: e.target.value})}
-              />
-            </div>
-          </div>
-        );
-      
-      case 'general':
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="appUrl">Application URL</Label>
-              <Input
-                id="appUrl"
-                value={generalData.appUrl}
-                onChange={(e) => setGeneralData({...generalData, appUrl: e.target.value})}
-                placeholder="http://example.com:8080"
-              />
-            </div>
-            <div>
-              <Label htmlFor="maxConcurrentCrawls">Max Concurrent Crawls</Label>
-              <Input
-                id="maxConcurrentCrawls"
-                type="number"
-                min="1"
-                value={generalData.maxConcurrentCrawls}
-                onChange={(e) => setGeneralData({...generalData, maxConcurrentCrawls: e.target.value})}
-              />
-            </div>
-          </div>
-        );
-    }
-  };
-
-  const progressValue = ((STEPS.findIndex(s => s.id === currentStep) + 1) / STEPS.length) * 100;
-  const currentStepIndex = STEPS.findIndex(s => s.id === currentStep);
+  }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow">
-        <h1 className="text-2xl font-bold text-center">WebCrawler Pro Setup</h1>
-        
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            {STEPS.map((step) => (
-              <div key={step.id} className="text-center">
-                <div className={`w-8 h-8 mx-auto rounded-full flex items-center justify-center ${completedSteps.includes(step.id) ? 'bg-green-500 text-white' : currentStep === step.id ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}>
-                  {STEPS.findIndex(s => s.id === step.id) + 1}
-                </div>
-                <div className="text-xs mt-1">{step.title}</div>
-              </div>
-            ))}
-          </div>
-          <Progress value={progressValue} className="h-2" />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="text-4xl mb-2">🕷️</div>
+          <h1 className="text-2xl font-bold text-gray-900">WebCrawler Pro</h1>
+          <p className="text-gray-500 text-sm mt-1">Ersteinrichtung — Schritt {step + 1} von {STEPS.length}</p>
         </div>
-        
-        <h2 className="text-lg font-medium">{STEPS[currentStepIndex].title}</h2>
-        
-        {getStepComponent()}
-        
-        <div className="flex justify-between pt-4">
-          {currentStepIndex > 0 ? (
-            <Button
-              variant="outline"
-              onClick={() => setCurrentStep(STEPS[currentStepIndex - 1].id as SetupStep)}
-            >
-              Back
-            </Button>
-          ) : (
-            <div />
-          )}
-          
-          <div className="space-x-2">
-            {STEPS[currentStepIndex].optional && (
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setCompletedSteps([...completedSteps, currentStep]);
-                  setCurrentStep(STEPS[currentStepIndex + 1].id as SetupStep);
-                }}
-              >
-                Skip
-              </Button>
+
+        {/* Progress Bar */}
+        <div className="flex gap-2 mb-8">
+          {STEPS.map((s, i) => (
+            <div key={s} className="flex-1">
+              <div className={`h-2 rounded-full transition-colors ${
+                i < step ? "bg-blue-500" : i === step ? "bg-blue-400" : "bg-gray-200"
+              }`} />
+              <p className={`text-xs mt-1 text-center truncate ${
+                i === step ? "text-blue-600 font-medium" : "text-gray-400"
+              }`}>{s}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Step 0: Admin */}
+        {step === 0 && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-gray-800">👤 Admin-Konto erstellen</h2>
+            <div>
+              <label className={labelClass}>E-Mail *</label>
+              <input type="email" className={inputClass} placeholder="admin@beispiel.de"
+                value={admin.email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdmin({...admin, email: e.target.value})} />
+            </div>
+            <div>
+              <label className={labelClass}>Name</label>
+              <input type="text" className={inputClass} placeholder="Max Mustermann"
+                value={admin.full_name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdmin({...admin, full_name: e.target.value})} />
+            </div>
+            <div>
+              <label className={labelClass}>Passwort * (min. 8 Zeichen)</label>
+              <input type="password" className={inputClass} placeholder="••••••••"
+                value={admin.password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdmin({...admin, password: e.target.value})} />
+            </div>
+            <div>
+              <label className={labelClass}>Passwort bestätigen *</label>
+              <input type="password" className={inputClass} placeholder="••••••••"
+                value={admin.confirmPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdmin({...admin, confirmPassword: e.target.value})} />
+            </div>
+          </div>
+        )}
+
+        {/* Step 1: Email */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-start">
+              <h2 className="text-lg font-semibold text-gray-800">📧 E-Mail Konfiguration</h2>
+              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded">Optional</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className={labelClass}>SMTP Host</label>
+                <input type="text" className={inputClass} placeholder="smtp.gmail.com"
+                  value={email.smtp_host} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail({...email, smtp_host: e.target.value})} />
+              </div>
+              <div>
+                <label className={labelClass}>Port</label>
+                <input type="text" className={inputClass} placeholder="587"
+                  value={email.smtp_port} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail({...email, smtp_port: e.target.value})} />
+              </div>
+              <div>
+                <label className={labelClass}>SMTP User</label>
+                <input type="text" className={inputClass} placeholder="user@gmail.com"
+                  value={email.smtp_user} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail({...email, smtp_user: e.target.value})} />
+              </div>
+              <div className="col-span-2">
+                <label className={labelClass}>SMTP Passwort</label>
+                <input type="password" className={inputClass} placeholder="••••••••"
+                  value={email.smtp_password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail({...email, smtp_password: e.target.value})} />
+              </div>
+              <div className="col-span-2">
+                <label className={labelClass}>Absender-Email</label>
+                <input type="email" className={inputClass} placeholder="noreply@beispiel.de"
+                  value={email.smtp_from} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail({...email, smtp_from: e.target.value})} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Google */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-start">
+              <h2 className="text-lg font-semibold text-gray-800">🔍 Google Integrationen</h2>
+              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded">Optional</span>
+            </div>
+            <div>
+              <label className={labelClass}>Search Console Client ID</label>
+              <input type="text" className={inputClass} placeholder="123456789-abc.apps.googleusercontent.com"
+                value={google.google_client_id} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGoogle({...google, google_client_id: e.target.value})} />
+            </div>
+            <div>
+              <label className={labelClass}>Search Console Client Secret</label>
+              <input type="password" className={inputClass} placeholder="GOCSPX-..."
+                value={google.google_client_secret} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGoogle({...google, google_client_secret: e.target.value})} />
+            </div>
+            <div>
+              <label className={labelClass}>Google Analytics Measurement ID</label>
+              <input type="text" className={inputClass} placeholder="G-XXXXXXXXXX"
+                value={google.ga_measurement_id} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGoogle({...google, ga_measurement_id: e.target.value})} />
+            </div>
+            <p className="text-xs text-gray-400">Keys werden verschlüsselt in der Datenbank gespeichert (AES-128).</p>
+          </div>
+        )}
+
+        {/* Step 3: General */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-gray-800">⚙️ Allgemeine Einstellungen</h2>
+            <div>
+              <label className={labelClass}>App-URL</label>
+              <input type="url" className={inputClass} placeholder="http://meinserver.de:44544"
+                value={general.app_url} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGeneral({...general, app_url: e.target.value})} />
+              <p className="text-xs text-gray-400 mt-1">Wird für Email-Links und OAuth-Callbacks verwendet.</p>
+            </div>
+            <div>
+              <label className={labelClass}>Max. gleichzeitige Crawls</label>
+              <select className={inputClass}
+                value={general.max_concurrent_crawls}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGeneral({...general, max_concurrent_crawls: e.target.value})}>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="5">5</option>
+                <option value="10">10</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+
+        {/* Navigation Buttons */}
+        <div className="flex justify-between mt-8">
+          <button
+            onClick={() => setStep(s => Math.max(0, s - 1))}
+            disabled={step === 0}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 disabled:opacity-30 transition-opacity">
+            ← Zurück
+          </button>
+
+          <div className="flex gap-3">
+            {step > 0 && step < STEPS.length - 1 && (
+              <button
+                onClick={() => setStep(s => s + 1)}
+                className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg transition-colors">
+                Überspringen
+              </button>
             )}
-            
-            {currentStepIndex < STEPS.length - 1 ? (
-              <Button
-                onClick={() => {
-                  setCompletedSteps([...completedSteps, currentStep]);
-                  setCurrentStep(STEPS[currentStepIndex + 1].id as SetupStep);
-                }}
-              >
-                Next
-              </Button>
+
+            {step < STEPS.length - 1 ? (
+              <button
+                onClick={() => { setError(""); setStep(s => s + 1); }}
+                className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                Weiter →
+              </button>
             ) : (
-              <Button onClick={handleSubmit} disabled={loading}>
-                {loading ? 'Completing...' : 'Complete Setup'}
-              </Button>
+              <button
+                onClick={handleFinish}
+                disabled={loading}
+                className="px-6 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">
+                {loading ? "Einrichten..." : "✓ Setup abschließen"}
+              </button>
             )}
           </div>
         </div>

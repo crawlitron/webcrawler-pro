@@ -263,3 +263,13 @@ class GA4Metric(Base):
     )
     
     project = relationship('Project')
+
+
+class AppSettings(Base):
+    """Application-wide settings, including encrypted API keys."""
+    __tablename__ = 'app_settings'
+
+    key = Column(String(255), primary_key=True)
+    value = Column(Text, nullable=True)
+    is_sensitive = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

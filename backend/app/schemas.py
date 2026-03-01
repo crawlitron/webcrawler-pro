@@ -118,3 +118,20 @@ class IssueListResponse(BaseModel):
     critical: int
     warning: int
     info: int
+
+
+# Setup Wizard Schemas
+from typing import Dict, Optional as Opt
+
+class SetupStatus(BaseModel):
+    completed: bool
+    steps_done: list
+
+class AdminSetup(BaseModel):
+    email: str
+    password: str
+    full_name: Opt[str] = None
+
+class SetupCompleteRequest(BaseModel):
+    admin: AdminSetup
+    settings: Dict[str, str] = {}
