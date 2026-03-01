@@ -14,7 +14,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Playwright browsers as root before switching user
-RUN playwright install chromium --with-deps 2>/dev/null || true
+# Install Playwright browser (Debian-based image - libasound2 is available)
+# Using || true as fallback since CWV is optional feature
+RUN playwright install chromium 2>/dev/null || true && \
+    playwright install-deps chromium 2>/dev/null || true
 
 COPY . .
 

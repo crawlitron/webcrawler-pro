@@ -186,10 +186,10 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio pytest-cov httpx
 
-      - name: Install Playwright browsers
-        working-directory: ./backend
-        continue-on-error: true  # Tests do not require real browser; CWV runs on VPS only
-        run: playwright install chromium --with-deps || echo "Playwright browser install skipped"
+      # NOTE: Playwright browser install is intentionally skipped in CI.
+      # Our test suite only tests Python imports and analysis logic - no real browser needed.
+      # CWV/Playwright runs on the VPS at runtime, not in CI.
+      # Browser install happens inside the Docker image build (backend/Dockerfile).
 
       - name: Run tests
         working-directory: ./backend
