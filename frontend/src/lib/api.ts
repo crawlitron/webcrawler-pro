@@ -309,6 +309,143 @@ export interface PerformanceAnalytics {
   slow_pages: PerformanceSlowPage[];
 }
 
+
+// v0.7.0: SEO Tools (robots.txt + sitemap)
+export interface RobotsAnalysis {
+  found: boolean;
+  url: string;
+  content: string;
+  sitemaps: string[];
+  disallowed_paths: string[];
+  crawl_delay: number | null;
+  user_agents: string[];
+  issues: SeoToolIssue[];
+}
+
+export interface SitemapAnalysis {
+  found: boolean;
+  url: string;
+  type: 'index' | 'urlset' | 'unknown';
+  urls: string[];
+  child_sitemaps: string[];
+  total_url_count: number;
+  issues: SeoToolIssue[];
+}
+
+export interface SeoToolIssue {
+  severity: 'critical' | 'warning' | 'info';
+  type: string;
+  description: string;
+  recommendation: string;
+}
+
+export interface UrlComparison {
+  crawled_count: number;
+  sitemap_count: number;
+  in_both: string[];
+  in_both_count: number;
+  in_sitemap_not_crawled: string[];
+  in_sitemap_not_crawled_count: number;
+  crawled_not_in_sitemap: string[];
+  crawled_not_in_sitemap_count: number;
+  latest_crawl_id: number | null;
+}
+
+export interface SeoToolsResult {
+  robots: RobotsAnalysis;
+  sitemap: SitemapAnalysis;
+  url_comparison: UrlComparison;
+}
+
+// v0.7.0: Crawl Compare
+export interface CrawlSummaryItem {
+  id: number;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  url_count: number;
+  issue_count: number;
+  critical_issues: number;
+  warning_issues: number;
+  info_issues: number;
+}
+
+export interface CrawlDiffSummary {
+  new_urls: number;
+  removed_urls: number;
+  fixed_issues: number;
+  new_issues: number;
+  improved_pages: number;
+  degraded_pages: number;
+}
+
+export interface IssueChange {
+  url: string;
+  type: string;
+  severity: string;
+  description?: string;
+}
+
+export interface StatusChange {
+  url: string;
+  old_status: number | null;
+  new_status: number | null;
+}
+
+export interface TitleChange {
+  url: string;
+  old: string;
+  new: string;
+}
+
+export interface PerformanceChange {
+  url: string;
+  old_score: number;
+  new_score: number;
+}
+
+export interface CrawlDiff {
+  crawl_a: CrawlSummaryItem;
+  crawl_b: CrawlSummaryItem;
+  summary: CrawlDiffSummary;
+  new_urls: string[];
+  removed_urls: string[];
+  new_issues: IssueChange[];
+  fixed_issues: IssueChange[];
+  status_changes: StatusChange[];
+  title_changes: TitleChange[];
+  performance_changes: PerformanceChange[];
+}
+
+// v0.7.0: Alerts
+export interface AlertConfig {
+  id: number;
+  project_id: number;
+  email: string;
+  alert_on_critical: boolean;
+  alert_on_new_issues: boolean;
+  alert_on_crawl_complete: boolean;
+  min_severity: string;
+  smtp_host: string | null;
+  smtp_port: number | null;
+  smtp_user: string | null;
+  smtp_password: string | null;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface AlertConfigCreate {
+  email: string;
+  alert_on_critical?: boolean;
+  alert_on_new_issues?: boolean;
+  alert_on_crawl_complete?: boolean;
+  min_severity?: string;
+  smtp_host?: string | null;
+  smtp_port?: number | null;
+  smtp_user?: string | null;
+  smtp_password?: string | null;
+  enabled?: boolean;
+}
 export const api = {
   // ---- Projects ----
   getProjects: () => request<Project[]>("/api/projects"),
@@ -416,4 +553,47 @@ export const api = {
   exportCsv: (crawlId: number) => `${API_BASE}/api/crawls/${crawlId}/export/csv`,
   exportJson: (crawlId: number) => `${API_BASE}/api/crawls/${crawlId}/export/json`,
   exportSitemap: (crawlId: number) => `${API_BASE}/api/crawls/${crawlId}/export/sitemap`,
+
+  // ---- v0.7.0: SEO Tools ----
+  getRobotsTxt: (projectId: number) =>
+    request<RobotsAnalysis>(`/api/projects/${projectId}/robots`),
+  getSitemap: (projectId: number) =>
+    request<SitemapAnalysis>(`/api/projects/${projectId}/sitemap`),
+  getSeoTools: (projectId: number) =>
+    request<SeoToolsResult>(`/api/projects/${projectId}/seo-tools`),
+
+  // ---- v0.7.0: Crawl Compare ----
+  getProjectCrawlList: (projectId: number) =>
+    request<CrawlSummaryItem[]>(`/api/projects/${projectId}/crawls`),
+  compareCrawls: (crawlAId: number, crawlBId: number) =>
+    request<CrawlDiff>(`/api/compare/${crawlAId}/${crawlBId}`),
+
+  // ---- v0.7.0: PDF Reports ----
+  getPdfReportUrl: (crawlId: number) => `${API_BASE}/api/crawls/${crawlId}/report/pdf`,
+  getHtmlReportUrl: (crawlId: number) => `${API_BASE}/api/crawls/${crawlId}/report/html`,
+  downloadPdfReport: (crawlId: number) => {
+    window.open(`${API_BASE}/api/crawls/${crawlId}/report/pdf`, "_blank");
+  },
+
+  // ---- v0.7.0: Alerts ----
+  getAlerts: (projectId: number) =>
+    request<AlertConfig[]>(`/api/projects/${projectId}/alerts`),
+  createAlert: (projectId: number, data: AlertConfigCreate) =>
+    request<AlertConfig>(`/api/projects/${projectId}/alerts`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateAlert: (projectId: number, alertId: number, data: Partial<AlertConfigCreate>) =>
+    request<AlertConfig>(`/api/projects/${projectId}/alerts/${alertId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteAlert: (projectId: number, alertId: number) =>
+    request<{ message: string }>(`/api/projects/${projectId}/alerts/${alertId}`, {
+      method: "DELETE",
+    }),
+  testAlert: (projectId: number) =>
+    request<{ message: string }>(`/api/projects/${projectId}/alerts/test`, {
+      method: "POST",
+    }),
 };

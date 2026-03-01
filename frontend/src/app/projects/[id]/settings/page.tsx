@@ -47,6 +47,20 @@ export default function ProjectSettingsPage() {
       setExcludePatterns((proj.exclude_patterns ?? []).join("\n"));
       setCrawlExternalLinks(proj.crawl_external_links ?? false);
       setCrawlSchedule(proj.crawl_schedule ?? "");
+      try {
+        const ac = await api.getAlertConfig(projectId);
+        setAlertConfig(ac);
+        if (ac) {
+          setAlertEmail(ac.email ?? "");
+          setAlertOnCritical(ac.alert_on_critical ?? true);
+          setAlertOnNewIssues(ac.alert_on_new_issues ?? true);
+          setAlertOnComplete(ac.alert_on_crawl_complete ?? false);
+          setAlertEnabled(ac.enabled ?? true);
+          setAlertSmtpHost(ac.smtp_host ?? "");
+          setAlertSmtpPort(String(ac.smtp_port ?? ""));
+          setAlertSmtpUser(ac.smtp_user ?? "");
+        }
+      } catch (_) { /* no alert config yet */ }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load project");
     } finally {
@@ -101,6 +115,43 @@ export default function ProjectSettingsPage() {
       <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
     </div>
   );
+
+
+  const handleSaveAlert = async () => {
+    if (!alertEmail) return;
+    setAlertSaving(true); setAlertSaved(false);
+    try {
+      const payload = {
+        email: alertEmail,
+        alert_on_critical: alertOnCritical,
+        alert_on_new_issues: alertOnNewIssues,
+        alert_on_crawl_complete: alertOnComplete,
+        enabled: alertEnabled,
+        smtp_host: alertSmtpHost || null,
+        smtp_port: alertSmtpPort ? Number(alertSmtpPort) : null,
+        smtp_user: alertSmtpUser || null,
+        smtp_password: alertSmtpPassword || null,
+      };
+      if (alertConfig) {
+        await api.updateAlertConfig(projectId, alertConfig.id, payload);
+      } else {
+        const created = await api.createAlertConfig(projectId, payload);
+        setAlertConfig(created);
+      }
+      setAlertSaved(true);
+      setTimeout(() => setAlertSaved(false), 2000);
+    } catch (e: any) { setError(e.message); }
+    finally { setAlertSaving(false); }
+  };
+
+  const handleTestAlert = async () => {
+    setAlertTesting(true); setAlertTestResult(null);
+    try {
+      await api.sendTestAlert(projectId);
+      setAlertTestResult("Test-E-Mail wurde gesendet!");
+    } catch (e: any) { setAlertTestResult("Fehler: " + e.message); }
+    finally { setAlertTesting(false); setTimeout(() => setAlertTestResult(null), 5000); }
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
@@ -235,6 +286,89 @@ export default function ProjectSettingsPage() {
           {saving ? "Saving..." : "Save Settings"}
         </button>
       </form>
+
+      {/* Email Alerting v0.7.0 */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-800">Email Alerting</h2>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={alertEnabled} onChange={e => setAlertEnabled(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600" />
+            <span className="text-sm text-gray-600">Aktiv</span>
+          </label>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">E-Mail Adresse *</label>
+          <input type="email" value={alertEmail} onChange={e => setAlertEmail(e.target.value)}
+            placeholder="alert@example.com"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Alert-Trigger</label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={alertOnCritical} onChange={e => setAlertOnCritical(e.target.checked)} className="w-4 h-4" />
+              <span className="text-sm text-gray-700">Kritische Issues gefunden</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={alertOnNewIssues} onChange={e => setAlertOnNewIssues(e.target.checked)} className="w-4 h-4" />
+              <span className="text-sm text-gray-700">Neue Issues (im Vergleich zum letzten Crawl)</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={alertOnComplete} onChange={e => setAlertOnComplete(e.target.checked)} className="w-4 h-4" />
+              <span className="text-sm text-gray-700">Crawl abgeschlossen</span>
+            </label>
+          </div>
+        </div>
+        <details className="border border-gray-100 rounded-lg">
+          <summary className="px-4 py-3 text-sm font-medium text-gray-600 cursor-pointer hover:bg-gray-50 rounded-lg">
+            SMTP-Konfiguration (optional - sonst Umgebungsvariablen)
+          </summary>
+          <div className="px-4 pb-4 pt-3 grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">SMTP Host</label>
+              <input value={alertSmtpHost} onChange={e => setAlertSmtpHost(e.target.value)}
+                placeholder="smtp.gmail.com"
+                className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">SMTP Port</label>
+              <input value={alertSmtpPort} onChange={e => setAlertSmtpPort(e.target.value)}
+                placeholder="587"
+                className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">SMTP User</label>
+              <input value={alertSmtpUser} onChange={e => setAlertSmtpUser(e.target.value)}
+                placeholder="user@gmail.com"
+                className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">SMTP Password</label>
+              <input type="password" value={alertSmtpPassword} onChange={e => setAlertSmtpPassword(e.target.value)}
+                placeholder="app-password"
+                className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+          </div>
+        </details>
+        {alertTestResult && (
+          <div className={`text-sm rounded-lg px-3 py-2 ${alertTestResult.startsWith("Fehler") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+            {alertTestResult}
+          </div>
+        )}
+        <div className="flex gap-3">
+          <button onClick={handleSaveAlert} disabled={!alertEmail || alertSaving}
+            className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            {alertSaving ? "Speichern..." : alertSaved ? "Gespeichert!" : "Alert-Config speichern"}
+          </button>
+          {alertConfig && (
+            <button onClick={handleTestAlert} disabled={alertTesting}
+              className="px-4 bg-gray-100 text-gray-700 rounded-lg py-2 text-sm font-medium hover:bg-gray-200 disabled:opacity-50 transition-colors">
+              {alertTesting ? "Sende..." : "Test-E-Mail senden"}
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Danger Zone */}
       <div className="bg-white rounded-xl border border-red-200 p-6 shadow-sm space-y-4">

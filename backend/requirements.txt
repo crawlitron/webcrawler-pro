@@ -11,4 +11,5 @@ pydantic==2.7.1
 python-multipart==0.0.9
 w3lib==2.1.2
 tldextract==5.1.2
-aiofiles==23.2.1
+aiofiles==23.2.1reportlab>=4.0.0
+aiosmtplib>=3.0.0

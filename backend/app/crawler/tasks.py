@@ -148,7 +148,7 @@ def run_crawl(
 ):
     """Celery task: crawl a site and store results in PostgreSQL."""
     from app.database import SessionLocal
-    from app.models import Crawl, Page, Issue, CrawlStatus, IssueSeverity
+    from app.models import Crawl, Page, Issue, CrawlStatus, IssueSeverity, Project
     from app.crawler.analyzer import SEOAnalyzer
 
     db = SessionLocal()
@@ -332,6 +332,139 @@ def run_crawl(
                         n_info = cnt
         except Exception as e:
             logger.error("Duplicate analysis failed for crawl %d: %s", crawl_id, e)
+
+        # --- Post-crawl v0.7.0: robots.txt + sitemap analysis ---
+        try:
+            from app.crawler.robots_sitemap import analyze_robots_txt, analyze_sitemap
+            from app.models import Page as PageModel
+            project = db.query(Project).filter(Project.id == crawl.project_id).first()
+            if project:
+                robots_result = analyze_robots_txt(project.start_url)
+                sitemap_urls = robots_result.get("sitemaps", [])
+                sitemap_url = sitemap_urls[0] if sitemap_urls else project.start_url
+                sitemap_result = analyze_sitemap(sitemap_url)
+
+                # Create a virtual page for robots.txt issues
+                robots_page_url = project.start_url.rstrip("/") + "/robots.txt"
+                robots_page = db.query(PageModel).filter(
+                    PageModel.crawl_id == crawl_id,
+                    PageModel.url == robots_page_url
+                ).first()
+                if not robots_page:
+                    robots_page = PageModel(
+                        crawl_id=crawl_id,
+                        url=robots_page_url,
+                        status_code=200 if robots_result.get("found") else 404,
+                        depth=0,
+                    )
+                    db.add(robots_page)
+                    db.flush()
+
+                for iss in robots_result.get("issues", []):
+                    try:
+                        sev_enum = IssueSeverity(iss["severity"])
+                    except ValueError:
+                        sev_enum = IssueSeverity.INFO
+                    db.add(Issue(
+                        crawl_id=crawl_id,
+                        page_id=robots_page.id,
+                        severity=sev_enum,
+                        issue_type=iss["type"],
+                        description=iss["description"],
+                        recommendation=iss.get("recommendation", ""),
+                        category="technical",
+                    ))
+                    if sev_enum == IssueSeverity.CRITICAL:
+                        n_critical += 1
+                    elif sev_enum == IssueSeverity.WARNING:
+                        n_warning += 1
+                    else:
+                        n_info += 1
+
+                for iss in sitemap_result.get("issues", []):
+                    try:
+                        sev_enum = IssueSeverity(iss["severity"])
+                    except ValueError:
+                        sev_enum = IssueSeverity.INFO
+                    db.add(Issue(
+                        crawl_id=crawl_id,
+                        page_id=robots_page.id,
+                        severity=sev_enum,
+                        issue_type=iss["type"],
+                        description=iss["description"],
+                        recommendation=iss.get("recommendation", ""),
+                        category="technical",
+                    ))
+                    if sev_enum == IssueSeverity.CRITICAL:
+                        n_critical += 1
+                    elif sev_enum == IssueSeverity.WARNING:
+                        n_warning += 1
+                    else:
+                        n_info += 1
+
+                db.commit()
+                logger.info("Crawl %d: robots/sitemap analysis done", crawl_id)
+        except Exception as e:
+            logger.error("robots/sitemap analysis failed for crawl %d: %s", crawl_id, e)
+            db.rollback()
+
+                # --- Post-crawl v0.7.0: Email Alerts ---
+        try:
+            from app.models import AlertConfig
+            from app.notifications.email_sender import send_alert_email_sync
+            import os
+            alert_configs = db.query(AlertConfig).filter(
+                AlertConfig.project_id == crawl.project_id,
+                AlertConfig.enabled == True,
+            ).all()
+            for ac in alert_configs:
+                should_send = False
+                if ac.alert_on_crawl_complete:
+                    should_send = True
+                if ac.alert_on_critical and n_critical > 0:
+                    should_send = True
+                if not should_send:
+                    continue
+                # Get new critical issues for this crawl
+                new_issues_list = []
+                if ac.alert_on_new_issues or ac.alert_on_critical:
+                    from app.models import Page as PageModel2
+                    crit_issues = db.query(Issue, PageModel2.url).join(
+                        PageModel2, Issue.page_id == PageModel2.id
+                    ).filter(
+                        Issue.crawl_id == crawl_id,
+                        Issue.severity == IssueSeverity.CRITICAL,
+                    ).limit(20).all()
+                    new_issues_list = [
+                        {"url": url, "type": iss.issue_type, "severity": "critical"}
+                        for iss, url in crit_issues
+                    ]
+                crawl_stats = {
+                    "crawl_id": crawl_id,
+                    "crawled_urls": n_crawled,
+                    "critical_issues": n_critical,
+                    "warning_issues": n_warning,
+                    "info_issues": n_info,
+                }
+                smtp_config = {
+                    "host": ac.smtp_host,
+                    "port": ac.smtp_port,
+                    "user": ac.smtp_user,
+                    "password": ac.smtp_password,
+                }
+                project_for_alert = db.query(Project).filter(Project.id == crawl.project_id).first()
+                project_name = project_for_alert.name if project_for_alert else str(crawl.project_id)
+                dashboard_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+                send_alert_email_sync(
+                    to_email=ac.email,
+                    project_name=project_name,
+                    crawl_stats=crawl_stats,
+                    new_issues=new_issues_list,
+                    smtp_config=smtp_config,
+                    dashboard_url=dashboard_url,
+                )
+        except Exception as e:
+            logger.error("Email alert failed for crawl %d: %s", crawl_id, e)
 
         crawl = db.query(Crawl).filter(Crawl.id == crawl_id).first()
         crawl.status = CrawlStatus.COMPLETED

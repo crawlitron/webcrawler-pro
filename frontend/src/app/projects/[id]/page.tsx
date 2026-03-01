@@ -182,6 +182,14 @@ export default function ProjectPage() {
             className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 hover:text-gray-900 transition-colors">
             ⚙️ Settings
           </Link>
+          <Link href={`/projects/${id}/seo-tools`}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+            SEO Tools
+          </Link>
+          <Link href={`/projects/${id}/compare`}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+            Vergleich
+          </Link>
         </div>
         <a href={project?.start_url} target="_blank" rel="noopener noreferrer"
             className="text-sm text-blue-500 hover:underline mt-1 inline-block">

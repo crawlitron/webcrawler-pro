@@ -99,3 +99,22 @@ class Issue(Base):
     category = Column(String(50), nullable=True)  # seo | accessibility | performance | etc.
     crawl = relationship("Crawl", back_populates="issues")
     page = relationship("Page", back_populates="issues")
+
+
+# v0.7.0: Email Alert Configuration
+class AlertConfig(Base):
+    __tablename__ = 'alert_configs'
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey('projects.id'), nullable=False)
+    email = Column(String(255), nullable=False)
+    alert_on_critical = Column(Boolean, default=True)
+    alert_on_new_issues = Column(Boolean, default=True)
+    alert_on_crawl_complete = Column(Boolean, default=False)
+    min_severity = Column(String(20), default='critical')
+    smtp_host = Column(String(255), nullable=True)
+    smtp_port = Column(Integer, nullable=True)
+    smtp_user = Column(String(255), nullable=True)
+    smtp_password = Column(String(512), nullable=True)
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    project = relationship('Project', backref='alert_configs')
