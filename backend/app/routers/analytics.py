@@ -367,6 +367,58 @@ def _get_wcag_category(issue_type: str) -> str:
     return "Other"
 
 
+
+
+def _get_wcag_level(issue_type: str) -> str:
+    # Parse WCAG level A/AA/AAA from v0.6.0 issue_type prefix
+    it = issue_type.lower()
+    if it.startswith("wcag_aaa_"): return "AAA"
+    if it.startswith("wcag_aa_"):  return "AA"
+    if it.startswith("wcag_a_"):   return "A"
+    legacy_aa = {"a11y_viewport_no_scale", "a11y_viewport_limited_scale",
+                 "a11y_vague_link", "a11y_empty_link", "a11y_icon_link",
+                 "a11y_missing_captions"}
+    if issue_type in legacy_aa: return "AA"
+    return "A"
+
+
+def _get_wcag_principle(issue_type: str) -> str:
+    # Parse WCAG principle from v0.6.0 issue_type
+    parts = issue_type.split("_")
+    if len(parts) >= 4 and parts[0].lower() == "wcag":
+        code = parts[3] if len(parts) > 3 else ""
+        if code and code[0].isdigit():
+            p = code[0]
+            if p == "1": return "perceivable"
+            if p == "2": return "operable"
+            if p == "3": return "understandable"
+            if p == "4": return "robust"
+    legacy = [
+        ("a11y_missing_alt", "perceivable"), ("a11y_empty_alt", "perceivable"),
+        ("a11y_missing_captions", "perceivable"), ("a11y_missing_lang", "perceivable"),
+        ("a11y_invalid_lang", "perceivable"), ("a11y_viewport", "perceivable"),
+        ("a11y_vague_link", "operable"), ("a11y_empty_link", "operable"),
+        ("a11y_icon_link", "operable"), ("a11y_missing_skip", "operable"),
+        ("a11y_positive_tabindex", "operable"),
+        ("a11y_input_missing", "understandable"), ("a11y_button_missing", "understandable"),
+        ("a11y_select_missing", "understandable"),
+        ("a11y_duplicate_ids", "robust"), ("a11y_missing_title", "robust"),
+        ("bfsg_", "perceivable"),
+    ]
+    for prefix, principle in legacy:
+        if issue_type.startswith(prefix): return principle
+    return "other"
+
+
+def _calc_level_score(issues: list, total_pages: int) -> int:
+    # Calculate 0-100 score for a subset of issues
+    if total_pages == 0: return 100
+    n_crit = sum(1 for i in issues if i.severity.value == "critical")
+    n_warn = sum(1 for i in issues if i.severity.value == "warning")
+    n_info = sum(1 for i in issues if i.severity.value == "info")
+    deduction = min(n_crit * 4, 60) + min(n_warn * 2, 30) + min(n_info * 0.5, 10)
+    return max(0, round(100 - deduction))
+
 @router.get("/projects/{project_id}/analytics/accessibility")
 def accessibility_analytics(
     project_id: int,
@@ -523,11 +575,66 @@ def accessibility_analytics(
     issue_types_present = {i.issue_type for i in a11y_issues}
     bfsg = _bfsg_checklist(issue_types_present)
 
+    # v0.6.0: level-based scoring + principle breakdown
+    issues_by_level_map: Dict[str, list] = {"A": [], "AA": [], "AAA": []}
+    issues_by_principle_map: Dict[str, int] = {
+        "perceivable": 0, "operable": 0, "understandable": 0, "robust": 0, "other": 0
+    }
+    for _iss in a11y_issues:
+        _lvl = _get_wcag_level(_iss.issue_type)
+        if _lvl in issues_by_level_map:
+            issues_by_level_map[_lvl].append(_iss)
+        _prin = _get_wcag_principle(_iss.issue_type)
+        issues_by_principle_map[_prin] = issues_by_principle_map.get(_prin, 0) + 1
+
+    score_a   = _calc_level_score(issues_by_level_map["A"],   total_pages)
+    score_aa  = _calc_level_score(issues_by_level_map["AA"],  total_pages)
+    score_aaa = _calc_level_score(issues_by_level_map["AAA"], total_pages)
+
+    def _level_stats(lvl_issues: list) -> dict:
+        return {
+            "count":    len(lvl_issues),
+            "critical": sum(1 for i in lvl_issues if i.severity.value == "critical"),
+            "warning":  sum(1 for i in lvl_issues if i.severity.value == "warning"),
+            "info":     sum(1 for i in lvl_issues if i.severity.value == "info"),
+        }
+
+    issues_by_level = {
+        "A":   {**_level_stats(issues_by_level_map["A"]),   "score": score_a},
+        "AA":  {**_level_stats(issues_by_level_map["AA"]),  "score": score_aa},
+        "AAA": {**_level_stats(issues_by_level_map["AAA"]), "score": score_aaa},
+    }
+
+    def _has_blockers(lvl: str) -> bool:
+        return any(i.severity.value in ("critical", "warning")
+                   for i in issues_by_level_map[lvl])
+
+    conformance_level = None
+    if not _has_blockers("A"):
+        conformance_level = "A"
+        if not _has_blockers("AA"):
+            conformance_level = "AA"
+            if not _has_blockers("AAA"):
+                conformance_level = "AAA"
+
+    bfsg_blockers = sum(
+        1 for i in a11y_issues
+        if i.severity.value in ("critical", "warning")
+        and (i.issue_type.startswith("bfsg_") or _get_wcag_level(i.issue_type) == "A")
+    )
+    bfsg_compliant = (bfsg_blockers == 0)
+
     return {
         "project_id": project_id,
         "crawl_id": cid,
         "crawl_completed_at": crawl.completed_at.isoformat() if crawl.completed_at else None,
+        "wcag_version": "2.2",
         "wcag_score": wcag_score,
+        "score_a": score_a,
+        "score_aa": score_aa,
+        "score_aaa": score_aaa,
+        "conformance_level": conformance_level,
+        "bfsg_compliant": bfsg_compliant,
         "total_pages": total_pages,
         "accessibility_issues": total_a11y,
         "issues_by_severity": {
@@ -535,12 +642,15 @@ def accessibility_analytics(
             "warning": n_warning,
             "info": n_info,
         },
+        "issues_by_level": issues_by_level,
+        "issues_by_principle": issues_by_principle_map,
         "issues_by_category": category_counts,
         "issues_by_type": issues_by_type,
         "top_affected_urls": top_affected_urls,
         "bfsg_checklist": bfsg,
         "score_label": _wcag_score_label(wcag_score),
     }
+
 
 
 def _wcag_score_label(score: int) -> str:

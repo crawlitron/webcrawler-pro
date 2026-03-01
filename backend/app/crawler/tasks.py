@@ -260,20 +260,41 @@ def run_crawl(
                     else:
                         n_info += 1
 
-                # v0.5.0: Accessibility issues (category=accessibility)
-                for issue in analyzer.analyze_accessibility(pd):
+                # v0.6.0: Accessibility issues (category=accessibility)
+                # analyze_accessibility now returns list of dicts with WCAG 2.1+2.2 metadata
+                for a11y_issue in analyzer.analyze_accessibility(pd):
+                    if isinstance(a11y_issue, dict):
+                        sev_str = a11y_issue.get("severity", "info")
+                        issue_type_str = a11y_issue.get("type", "wcag_unknown")
+                        desc = a11y_issue.get("description", "")
+                        title = a11y_issue.get("title", "")
+                        criterion = a11y_issue.get("wcag_criterion", "")
+                        recommendation = (
+                            f"{title} (WCAG {criterion})".strip(" (")
+                            if criterion else title
+                        )
+                    else:
+                        # Legacy SEOIssue namedtuple fallback
+                        sev_str = a11y_issue.severity
+                        issue_type_str = a11y_issue.issue_type
+                        desc = a11y_issue.description
+                        recommendation = getattr(a11y_issue, "recommendation", "") or ""
+                    try:
+                        sev_enum = IssueSeverity(sev_str)
+                    except ValueError:
+                        sev_enum = IssueSeverity.INFO
                     db.add(Issue(
                         crawl_id=crawl_id,
                         page_id=page.id,
-                        severity=IssueSeverity(issue.severity),
-                        issue_type=issue.issue_type,
-                        description=issue.description,
-                        recommendation=issue.recommendation,
+                        severity=sev_enum,
+                        issue_type=issue_type_str,
+                        description=desc,
+                        recommendation=recommendation,
                         category="accessibility",
                     ))
-                    if issue.severity == "critical":
+                    if sev_str == "critical":
                         n_critical += 1
-                    elif issue.severity == "warning":
+                    elif sev_str == "warning":
                         n_warning += 1
                     else:
                         n_info += 1

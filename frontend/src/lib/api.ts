@@ -258,15 +258,31 @@ export interface A11yAffectedUrl {
   total: number;
 }
 
+export interface A11yLevelData {
+  count: number;
+  critical: number;
+  warning: number;
+  info: number;
+  score: number;
+}
+
 export interface AccessibilityAnalytics {
   project_id: number;
   crawl_id: number | null;
   crawl_completed_at?: string;
+  wcag_version?: string;
   wcag_score: number | null;
+  score_a?: number;
+  score_aa?: number;
+  score_aaa?: number;
   score_label: "good" | "needs_improvement" | "poor";
+  conformance_level?: "A" | "AA" | "AAA" | null;
+  bfsg_compliant?: boolean;
   total_pages: number;
   accessibility_issues: number;
   issues_by_severity: { critical: number; warning: number; info: number };
+  issues_by_level?: Record<string, A11yLevelData>;
+  issues_by_principle?: Record<string, number>;
   issues_by_category: Record<string, A11yCategoryData>;
   issues_by_type: A11yIssueType[];
   top_affected_urls: A11yAffectedUrl[];
