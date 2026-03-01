@@ -120,30 +120,23 @@ function DetailPanel({ page, crawlId, onClose }: { page: Page; crawlId: number; 
           <section>
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">SEO Data</h3>
             <dl className="space-y-2 text-sm">
-              {[
-                ["Title", page.title || <span className="text-red-500 italic">Missing</span>],
-                ["Meta Description", page.meta_description || <span className="text-yellow-600 italic">Missing</span>],
-                ["H1", page.h1 || <span className="text-red-500 italic">Missing</span>],
-                ["H2 Count", page.h2_count],
-                ["Canonical", page.canonical_url || "—"],
-                ["Content Type", page.content_type || "—"],
-                ["Response Time", page.response_time != null ? `${(page.response_time * 1000).toFixed(0)}ms` : "—"],
-                ["Word Count", page.word_count],
-                ["Depth", page.depth],
-                ["Internal Links", page.internal_links_count],
-                ["External Links", page.external_links_count],
-                ["Images no Alt", page.images_without_alt],
-              ].map(([label, val]) => (
-                <div key={String(label)} className="flex gap-2">
-                  <dt className="w-36 shrink-0 text-gray-500">{label}</dt>
-                  <dd className="flex-1 text-gray-900 break-all">{val}</dd>
-                </div>
-              ))}
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">Title</dt><dd className="flex-1 text-gray-900 break-all text-red-500 italic" data-missing={!page.title}>{page.title || "Missing"}</dd></div>
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">Meta Description</dt><dd className="flex-1 text-gray-900 break-all" data-missing={!page.meta_description}>{page.meta_description || "Missing"}</dd></div>
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">H1</dt><dd className="flex-1 text-gray-900 break-all" data-missing={!page.h1}>{page.h1 || "Missing"}</dd></div>
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">H2 Count</dt><dd className="flex-1 text-gray-900">{page.h2_count ?? ""}</dd></div>
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">Canonical</dt><dd className="flex-1 text-gray-900 break-all">{page.canonical_url || "—"}</dd></div>
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">Content Type</dt><dd className="flex-1 text-gray-900">{page.content_type || "—"}</dd></div>
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">Response Time</dt><dd className="flex-1 text-gray-900">{page.response_time != null ? `${(page.response_time * 1000).toFixed(0)}ms` : "—"}</dd></div>
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">Word Count</dt><dd className="flex-1 text-gray-900">{page.word_count ?? ""}</dd></div>
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">Depth</dt><dd className="flex-1 text-gray-900">{page.depth ?? ""}</dd></div>
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">Internal Links</dt><dd className="flex-1 text-gray-900">{page.internal_links_count ?? ""}</dd></div>
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">External Links</dt><dd className="flex-1 text-gray-900">{page.external_links_count ?? ""}</dd></div>
+              <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">Images no Alt</dt><dd className="flex-1 text-gray-900">{page.images_without_alt ?? ""}</dd></div>
             </dl>
           </section>
 
           {/* Redirect Chain */}
-          {redirectChain.length > 0 && (
+          {(redirectChain.length > 0) && (
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Redirect Chain ({redirectChain.length - 1} hop{redirectChain.length > 2 ? "s" : ""})</h3>
               <ol className="space-y-1">
@@ -161,20 +154,20 @@ function DetailPanel({ page, crawlId, onClose }: { page: Page; crawlId: number; 
           )}
 
           {/* Open Graph */}
-          {(extra.og_title || extra.og_description || extra.og_image) && (
+          {(!!extra.og_title || !!extra.og_description || !!extra.og_image) && (
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Open Graph</h3>
               <dl className="space-y-2 text-sm">
-                {extra.og_title && <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">og:title</dt><dd className="flex-1 text-gray-900">{String(extra.og_title)}</dd></div>}
-                {extra.og_description && <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">og:description</dt><dd className="flex-1 text-gray-900">{String(extra.og_description)}</dd></div>}
-                {extra.og_image && <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">og:image</dt><dd className="flex-1 text-gray-900 break-all">{String(extra.og_image)}</dd></div>}
-                {extra.og_type && <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">og:type</dt><dd className="flex-1 text-gray-900">{String(extra.og_type)}</dd></div>}
+                {!!extra.og_title && <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">og:title</dt><dd className="flex-1 text-gray-900">{String(extra.og_title)}</dd></div>}
+                {!!extra.og_description && <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">og:description</dt><dd className="flex-1 text-gray-900">{String(extra.og_description)}</dd></div>}
+                {!!extra.og_image && <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">og:image</dt><dd className="flex-1 text-gray-900 break-all">{String(extra.og_image)}</dd></div>}
+                {!!extra.og_type && <div className="flex gap-2"><dt className="w-36 shrink-0 text-gray-500">og:type</dt><dd className="flex-1 text-gray-900">{String(extra.og_type)}</dd></div>}
               </dl>
             </section>
           )}
 
           {/* JSON-LD */}
-          {extra.has_jsonld && (
+          {!!extra.has_jsonld && (
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Structured Data</h3>
               <div className="flex flex-wrap gap-1">
