@@ -132,7 +132,7 @@ jobs:
   # ===========================================================================
   backend-test:
     name: Backend Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [validate, backend-lint]
 
     services:
@@ -188,7 +188,8 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: ./backend
-        run: playwright install chromium --with-deps
+        continue-on-error: true  # Tests do not require real browser; CWV runs on VPS only
+        run: playwright install chromium --with-deps || echo "Playwright browser install skipped"
 
       - name: Run tests
         working-directory: ./backend
