@@ -493,7 +493,7 @@ export default function UrlExplorerPage() {
                     </td>
                     <td className="px-4 py-2.5 max-w-xs">
                       <p className="truncate text-gray-800 font-medium" title={p.url}>
-                        {p.url.replace(/^https?://[^/]+/, "") || "/"}
+                        {p.url.split('/').slice(3).join('/') || '/' || "/"}
                       </p>
                       {p.title && <p className="truncate text-xs text-gray-400" title={p.title}>{p.title}</p>}
                     </td>

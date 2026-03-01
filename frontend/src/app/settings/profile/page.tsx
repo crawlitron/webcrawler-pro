@@ -20,7 +20,7 @@ export default function ProfilePage() {
       body: JSON.stringify({ full_name: fullName }),
     });
     const data = await res.json();
-    if (res.ok) { await refetch(); setMsg('Profile updated!''); }
+    if (res.ok) { await refetch(); setMsg('Profile updated!'); }
     else setMsg(data.detail || 'Update failed');
   }
 
@@ -32,7 +32,7 @@ export default function ProfilePage() {
       body: JSON.stringify(pwForm),
     });
     const data = await res.json();
-    if (res.ok) { setPwForm({ current_password: '', new_password: '' }); setPwMsg('Password changed!''); }
+    if (res.ok) { setPwForm({ current_password: '', new_password: '' }); setPwMsg('Password changed!'); }
     else setPwMsg(data.detail || 'Change failed');
   }
 

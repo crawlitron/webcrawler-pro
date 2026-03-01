@@ -255,7 +255,7 @@ export default function AnalyticsPage() {
                 <div key={p.page_id} className="flex items-center gap-2 text-sm group">
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-gray-800 font-medium group-hover:text-blue-600" title={p.url}>
-                      {p.url.replace(/^https?://[^/]+/, "") || "/"}
+                      {p.url.split('/').slice(3).join('/') || '/' || "/"}
                     </p>
                   </div>
                   <div className="flex gap-1 shrink-0">
