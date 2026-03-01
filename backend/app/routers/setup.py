@@ -18,9 +18,7 @@ if not FERNET_KEY:
     env_path = os.path.abspath(env_path)
     try:
         with open(env_path, "a") as f:
-            f.write(f"
-FERNET_KEY={FERNET_KEY}
-")
+            f.write("\nFERNET_KEY=" + FERNET_KEY + "\n")
     except Exception:
         pass
 

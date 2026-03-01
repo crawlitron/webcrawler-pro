@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -18,8 +18,8 @@ except ImportError:
     _AUTH_AVAILABLE = False
     logger.warning("python-jose or passlib not installed")
 
-from ..database import SessionLocal
-from ..models import User
+from ..database import SessionLocal  # noqa: E402
+from ..models import User  # noqa: E402
 
 SECRET_KEY = os.getenv("SECRET_KEY", "changeme-replace-with-openssl-rand-hex-32-xxxxxxxxxxxxxxxx")
 ALGORITHM = "HS256"
@@ -103,7 +103,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             return None
     except JWTError:
         return None
-    return db.query(User).filter(User.id == int(user_id), User.is_active == True).first()
+    return db.query(User).filter(User.id == int(user_id), User.is_active is True).first()
 
 
 def require_user(current_user: Optional[User] = Depends(get_current_user)) -> User:
@@ -135,7 +135,7 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     if not _AUTH_AVAILABLE:
         raise HTTPException(503, "Auth dependencies not installed")
-    user = db.query(User).filter(User.email == form.username, User.is_active == True).first()
+    user = db.query(User).filter(User.email == form.username, User.is_active is True).first()
     if not user or not verify_password(form.password, user.hashed_password):
         raise HTTPException(401, "Invalid email or password")
     user.last_login = datetime.utcnow()
@@ -232,14 +232,14 @@ def google_callback(code: str, state: Optional[str] = None, db: Session = Depend
         }, timeout=10)
         resp.raise_for_status()
         token_data = resp.json()
-    except Exception as e:
+    except Exception:
         from fastapi.responses import RedirectResponse
         return RedirectResponse(f"{frontend_url}/auth/login?error=google_token_failed")
 
     # Get user info
     try:
         userinfo = httpx.get("https://www.googleapis.com/oauth2/v2/userinfo",
-                             headers={"Authorization": f"Bearer {token_data["access_token"]}"},
+                             headers={"Authorization": "Bearer " + token_data.get("access_token", "")},
                              timeout=10).json()
     except Exception:
         from fastapi.responses import RedirectResponse

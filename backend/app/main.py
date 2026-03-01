@@ -139,11 +139,11 @@ def run_migrations():
         )
         """,
         """
-        CREATE INDEX IF NOT EXISTS ix_ga4_metrics_project_date 
+        CREATE INDEX IF NOT EXISTS ix_ga4_metrics_project_date
         ON ga4_metrics (project_id, date)
         """,
         """
-        CREATE INDEX IF NOT EXISTS ix_ga4_metrics_page 
+        CREATE INDEX IF NOT EXISTS ix_ga4_metrics_page
         ON ga4_metrics (project_id, page_path)
         """,
     ]
@@ -206,6 +206,7 @@ def _get_cors_origins() -> list:
     if frontend_url and frontend_url not in origins:
         origins.append(frontend_url)
     return origins
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -272,7 +273,8 @@ async def seed_test_account():
     try:
         from .routers.auth import hash_password
         from .models import User
-        db = next(iter([SessionLocal()]))
+        from .database import SessionLocal as _SessionLocal
+        db = _SessionLocal()
         try:
             exists = db.query(User).filter(User.email == "wcp@wcp.local").first()
             if not exists:
