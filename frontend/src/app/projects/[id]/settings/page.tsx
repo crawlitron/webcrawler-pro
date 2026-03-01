@@ -34,6 +34,20 @@ export default function ProjectSettingsPage() {
   const [crawlExternalLinks, setCrawlExternalLinks] = useState(false);
   const [crawlSchedule, setCrawlSchedule] = useState(""); // v0.5.0
   const [useJsRendering, setUseJsRendering] = useState(false);    // v0.8.0
+  const [alertConfig, setAlertConfig] = useState<any>(null);
+  const [alertEmail, setAlertEmail] = useState("");
+  const [alertOnCritical, setAlertOnCritical] = useState(true);
+  const [alertOnNewIssues, setAlertOnNewIssues] = useState(true);
+  const [alertOnComplete, setAlertOnComplete] = useState(false);
+  const [alertEnabled, setAlertEnabled] = useState(true);
+  const [alertSmtpHost, setAlertSmtpHost] = useState("");
+  const [alertSmtpPort, setAlertSmtpPort] = useState("");
+  const [alertSmtpUser, setAlertSmtpUser] = useState("");
+  const [alertSmtpPassword, setAlertSmtpPassword] = useState("");
+  const [alertSaving, setAlertSaving] = useState(false);
+  const [alertSaved, setAlertSaved] = useState(false);
+  const [alertTesting, setAlertTesting] = useState(false);
+  const [alertTestResult, setAlertTestResult] = useState<string | null>(null);
   const [jsWaitTime, setJsWaitTime] = useState(2.0);              // v0.8.0
 
   const load = useCallback(async () => {
@@ -153,7 +167,7 @@ export default function ProjectSettingsPage() {
   const handleTestAlert = async () => {
     setAlertTesting(true); setAlertTestResult(null);
     try {
-      await api.sendTestAlert(projectId);
+      await api.testAlert(projectId);
       setAlertTestResult("Test-E-Mail wurde gesendet!");
     } catch (e: any) { setAlertTestResult("Fehler: " + e.message); }
     finally { setAlertTesting(false); setTimeout(() => setAlertTestResult(null), 5000); }

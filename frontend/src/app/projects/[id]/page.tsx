@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 
 "use client";
 import { useEffect, useState, useCallback } from "react";
@@ -67,7 +69,7 @@ export default function ProjectPage() {
 
   const loadIssues = useCallback(async (c: Crawl) => {
     if (c.status !== "completed") return;
-    const data = await api.getIssues(c.id, issueSeverity || undefined);
+    const data = await api.getIssues(c.id, issueSeverity ? { severity: issueSeverity } : undefined);
     setIssues(data);
   }, [issueSeverity]);
 

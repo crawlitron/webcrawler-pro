@@ -582,6 +582,18 @@ export const api = {
   },
 
   // ---- v0.7.0: Alerts ----
+  getAlertConfig: (projectId: number) =>
+    request<AlertConfig>(`/api/projects/${projectId}/alerts/config`),
+  updateAlertConfig: (projectId: number, alertId: number, data: Partial<AlertConfigCreate>) =>
+    request<AlertConfig>(`/api/projects/${projectId}/alerts/config/${alertId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  createAlertConfig: (projectId: number, data: AlertConfigCreate) =>
+    request<AlertConfig>(`/api/projects/${projectId}/alerts/config`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   getAlerts: (projectId: number) =>
     request<AlertConfig[]>(`/api/projects/${projectId}/alerts`),
   createAlert: (projectId: number, data: AlertConfigCreate) =>
