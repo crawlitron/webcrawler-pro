@@ -1,11 +1,8 @@
 [flake8]
+max-line-length = 130
+exclude = __pycache__,migrations,.git,venv
 per-file-ignores =
     app/crawler/spider.py:F401
     app/models.py:F811
     app/routers/teams.py:F541
     app/schemas_additions.py:F401
-max-line-length = 130
-ignore = E128,E125,E501,W503,W504,E231,E241,E226,E701,E704,E225,E272,E303,E302,E305,E306,W291,W293,F841
-exclude = __pycache__,migrations,.git,venv
-per-file-ignores =
-    __init__.py:F401
