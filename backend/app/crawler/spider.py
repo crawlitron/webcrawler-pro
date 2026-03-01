@@ -62,7 +62,7 @@ class SEOSpider(scrapy.Spider):
         for url in self.start_urls:
             yield self.make_request(url, callback=self.parse, errback=self.errback, meta={'depth': 0})
 
-        allowed_domains = None if crawl_external_links else [self.base_domain]
+        allowed_domains = None if self.crawl_external_links else [self.base_domain]
         self.link_extractor = LinkExtractor(
             allow_domains=allowed_domains,
             deny_extensions=[
