@@ -1,4 +1,3 @@
-
 services:
   # ── PostgreSQL ──────────────────────────────────────────────────────────────
   postgres:
@@ -36,9 +35,27 @@ services:
     container_name: webcrawler_backend
     restart: unless-stopped
     environment:
+      # Core Database & Cache
       DATABASE_URL: ${DATABASE_URL:-postgresql://webcrawler:changeme@postgres:5432/webcrawler}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      
+      # Security & Authentication
+      SECRET_KEY: ${SECRET_KEY:-changeme-dev-secret-key}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      
+      # CORS & HTTP Settings
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      APP_URL: ${APP_URL:-http://localhost:44544}
+      
+      # Google OAuth Integration
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:44544/api/integrations/gsc/callback}
+      
+      # Celery Configuration
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,6 +73,9 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://webcrawler:changeme@postgres:5432/webcrawler}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY:-changeme-dev-secret-key}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     depends_on:
       postgres:
         condition: service_healthy

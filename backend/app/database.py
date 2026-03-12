@@ -1,11 +1,10 @@
-
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://webcrawler:webcrawler_pass@postgres:5432/webcrawler_db"
+    "postgresql://webcrawler:changeme@postgres:5432/webcrawler"
 )
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)

@@ -39,7 +39,7 @@ entryPoints:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: "${ACME_EMAIL}"
+      email: "eddi@validosta.de"
       storage: "/acme.json"
       # Use HTTP Challenge (port 80 must be reachable)
       httpChallenge:

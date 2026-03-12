@@ -155,7 +155,7 @@ def run_migrations():
             except Exception as e:
                 logger.warning("Migration skipped (%s): %s", str(sql).strip()[:60], e)
                 conn.rollback()
-    logger.info("Database migrations applied (v0.8.0)")
+    logger.info("Database migrations applied (v1.2.4)")
 
 
 def create_tables(retries=10, delay=3):
@@ -170,17 +170,42 @@ def create_tables(retries=10, delay=3):
             time.sleep(delay)
     raise RuntimeError("Could not connect to database after multiple retries")
 
+def seed_test_account():
+    """Create default test account wcp@wcp.local / wcp."""
+    try:
+        from .routers.auth import hash_password
+        from .models import User
+        from .database import SessionLocal as _SessionLocal
+        db = _SessionLocal()
+        try:
+            exists = db.query(User).filter(User.email == "wcp@wcp.local").first()
+            if not exists:
+                test_user = User(
+                    email="wcp@wcp.local",
+                    hashed_password=hash_password("wcp"),
+                    full_name="Test User (WCP)",
+                    is_admin=False,
+                    is_active=True,
+                )
+                db.add(test_user)
+                db.commit()
+                logger.info("✅ Test account created: wcp@wcp.local / wcp")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Could not seed test account: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_tables()
+    seed_test_account()
     yield
 
 
 app = FastAPI(
     title="WebCrawler Pro API",
     description="SEO Crawler API — Screaming Frog alternative",
-    version="0.8.0",
+    version="1.2.4",
     lifespan=lifespan,
 )
 
@@ -229,27 +254,12 @@ app.include_router(teams.router)
 app.include_router(integrations.router)
 app.include_router(mobile.router)
 
-# Optional routers (loaded if module exists)
-try:
-    from .routers import seo_tools
-    app.include_router(seo_tools.router)
-except ImportError:
-    pass
-try:
-    from .routers import compare
-    app.include_router(compare.router)
-except ImportError:
-    pass
-try:
-    from .routers import reports
-    app.include_router(reports.router)
-except ImportError:
-    pass
-try:
-    from .routers import alerts
-    app.include_router(alerts.router)
-except ImportError:
-    pass
+# Include all optional routers (they exist in the project)
+from .routers import seo_tools, compare, reports, alerts
+app.include_router(seo_tools.router)
+app.include_router(compare.router)
+app.include_router(reports.router)
+app.include_router(alerts.router)
 
 
 @app.get("/health")
@@ -257,38 +267,11 @@ def health():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        return {"status": "healthy", "db": "connected", "version": "0.8.0"}
+        return {"status": "healthy", "db": "connected", "version": "1.2.4"}
     except Exception as e:
         return {"status": "unhealthy", "db": str(e)}
 
 
 @app.get("/")
 def root():
-    return {"name": "WebCrawler Pro", "version": "0.8.0", "docs": "/docs"}
-
-
-@app.on_event("startup")
-async def seed_test_account():
-    """Create default test account wcp@wcp.local / wcp on first start."""
-    try:
-        from .routers.auth import hash_password
-        from .models import User
-        from .database import SessionLocal as _SessionLocal
-        db = _SessionLocal()
-        try:
-            exists = db.query(User).filter(User.email == "wcp@wcp.local").first()
-            if not exists:
-                test_user = User(
-                    email="wcp@wcp.local",
-                    hashed_password=hash_password("wcp"),
-                    full_name="Test User (WCP)",
-                    is_admin=False,
-                    is_active=True,
-                )
-                db.add(test_user)
-                db.commit()
-                logger.info("✅ Test account created: wcp@wcp.local / wcp")
-        finally:
-            db.close()
-    except Exception as e:
-        logger.warning(f"Could not seed test account: {e}")
+    return {"name": "WebCrawler Pro", "version": "1.2.4", "docs": "/docs"}
